@@ -1,2 +1,2 @@
-# Tag-Replace_for_Aegisub
-A Lua script for aegisub that can achieve kara template effects and has more useful features.
+# Tag Replace
+[How to use](https://github.com/op200/Tag-Replace_for_Aegisub/wiki)
