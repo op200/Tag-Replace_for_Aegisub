@@ -1,57 +1,9 @@
-﻿--[[
-    usage:
-        Effect:
-            template@<class>[;<class>...]#[<mode>[;<mode>...]]
---[[			Template Replacement Execution Statement
-				模板替换执行声明
-				将根据mode执行具有交集class的被执行行
-				该行为注释行时才会执行
-			retagvar@
-				全局变量声明
-				该行为注释行时才会执行
-			retagvar@<class>[;<class>...]
-				局部变量声明
-				该行为注释行时才会执行
-	    Text:
-            {<be replaced>}{<tag>}<text>
-				The content of the template
-				模板内容声明
-				<be replaced>被替换成<tag>，并在这个{}后追加<text>
-				该行非注释行时才会执行
-			
-    mode(string):
-        根据单词判断replace模式对应的整数值，代码执行中使用int判断replace模式
-		<Empty string>:
-			default mode
-x       rmtag:
-			与被替换tag处于同一{}内的tag会被移除
-x		rmalltag:
-			与被替换tag处于同一行内的所有tag会被移除
-			启用后忽略"rmtag"
-x		lossematch:
-			宽松的<be replaced tag>匹配模式，{}中的样式不需要顺序一致
-x		notag:
-			将<be replaced>匹配整行文本，而不是tag
-x		strictstyle:
-			严格匹配样式名，仅对同样式名的行执行替换
-x		strictname:
-			严格匹配说话人，仅对同说话人的行执行替换
-	mode(int):
-		   0:default mode
-		   1:rmtag
-		   2:rmalltag
-		  10:lossematch
-		 100:notag
-		1000:strictstyle
-		2000:strictname
-]]
-
-local gt=aegisub.gettext
+﻿local gt=aegisub.gettext
 
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "0.1"
+script_version = "0.1.1"
 
 function debug(sub,t,is)
 	if is then
@@ -138,6 +90,14 @@ function var_expansion(text, re_num)--input文本和replace次数，通过re_num
 		end
 	end
 	--扩展表达式
+	while true do
+		local pos1, pos2 = text:find("!.-!")
+		if not pos1 then break end
+		local expression = text:sub(pos1+1,pos2-1)
+		if not (expression=="") then
+			text = text:sub(1,pos1-1)..loadstring("return ("..expression..")")()..text:sub(pos2+1)
+		end
+	end
 	return text
 end
 
