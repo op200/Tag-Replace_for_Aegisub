@@ -3,9 +3,18 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "0.1.2"
+script_version = "0.1.3"
 
 require("karaskel")
+
+local user_var={--自定义变量键值表
+	kdur={0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
+	meta,
+	styles,
+	begin,
+	temp_line,
+	bere_line
+}
 
 function debug(sub,t,is)
 	if is then
@@ -67,11 +76,7 @@ function initialize(sub,begin)
 	end
 end
 
-local user_var={--自定义变量键值表
-	kdur={0}--存储方式为前缀和，从[2]开始计数，方便相对值计算
-}
-
-function var_expansion(text, re_num, sub, begin, temp_line, bere_line)--input文本和replace次数，通过re_num映射karaok变量至变量表
+function var_expansion(text, re_num, sub)--input文本和replace次数，通过re_num映射karaok变量至变量表
 	--扩展变量
 	while true do
 		local pos1, pos2 = text:find("%$%w+")
@@ -97,7 +102,7 @@ function var_expansion(text, re_num, sub, begin, temp_line, bere_line)--input文
 		if not pos1 then break end
 		local expression = text:sub(pos1+1,pos2-1)
 		if not (expression=="") then
-			text = text:sub(1,pos1-1)..loadstring("return function(sub,begin,temp_line,bere_line) return ("..expression..") end")()(sub,begin,temp_line,bere_line)..text:sub(pos2+1)
+			text = text:sub(1,pos1-1)..loadstring("return function(sub,user_var) "..expression.." end")()(sub,user_var)..text:sub(pos2+1)
 		end
 	end
 	return text
@@ -146,11 +151,11 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 			--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
 			local pos3 = insert_line.text:find("}",pos2+1)--记录temp_tag后的}的位置
 
-			local new_temp_add_text=var_expansion(temp_add_text,re_num,sub,begin,temp,bere)
+			local new_temp_add_text=var_expansion(temp_add_text,re_num,sub)
 			insert_line.text = insert_line.text:sub(1,pos3)..new_temp_add_text..insert_line.text:sub(pos3+1)--插入new_temp_add_text
 			pos3 = pos3 + new_temp_add_text:len() - insert_line.text:len()--因为temp_tag含有正则表达式，无法直接获取长度，所以pos3先减原长，循环结束时再加新长
 
-			local new_temp_re_tag=var_expansion(temp_re_tag,re_num,sub,begin,temp,bere)
+			local new_temp_re_tag=var_expansion(temp_re_tag,re_num,sub)
 			insert_line.text = insert_line.text:sub(1,pos1-1)..new_temp_re_tag..insert_line.text:sub(pos2+1)--插入new_temp_re_tag
 			find_pos, re_num = pos3 + insert_line.text:len() + 1, re_num+1
 		end
@@ -189,6 +194,7 @@ end
 function do_macro(sub)
     local begin=find_event(sub)
 	local temp=begin
+	user_var.begin=begin
 	initialize(sub,begin)--初始化，删除所有beretag!行，并还原:beretag@行
     while temp<=#sub do--Find template lines. 检索模板行
 		-- if temp>#sub then break end--debug用
@@ -197,6 +203,7 @@ function do_macro(sub)
 			local bere=begin
             while bere<=#sub do
 				if mode%10==0 then--根据mode判断是否替换
+					user_var.temp_line, user_var.bere_line=temp, bere
 					local skip = do_replace(sub, temp, bere, class, mode, begin)
 					bere = bere + skip + 1
 				elseif mode%10==1 then
@@ -211,6 +218,7 @@ function do_macro(sub)
 end
 
 function macro_processing_function(subtitles,selected_lines)--Execute Macro. 执行宏
+	user_var.meta, user_var.styles = karaskel.collect_head(subtitles, false)
     do_macro(subtitles)
 end
 
