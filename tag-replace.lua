@@ -3,7 +3,9 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "0.1.1"
+script_version = "0.1.2"
+
+require("karaskel")
 
 function debug(sub,t,is)
 	if is then
@@ -69,7 +71,7 @@ local user_var={--自定义变量键值表
 	kdur={0}--存储方式为前缀和，从[2]开始计数，方便相对值计算
 }
 
-function var_expansion(text, re_num)--input文本和replace次数，通过re_num映射karaok变量至变量表
+function var_expansion(text, re_num, sub, begin, temp_line, bere_line)--input文本和replace次数，通过re_num映射karaok变量至变量表
 	--扩展变量
 	while true do
 		local pos1, pos2 = text:find("%$%w+")
@@ -95,13 +97,13 @@ function var_expansion(text, re_num)--input文本和replace次数，通过re_num
 		if not pos1 then break end
 		local expression = text:sub(pos1+1,pos2-1)
 		if not (expression=="") then
-			text = text:sub(1,pos1-1)..loadstring("return ("..expression..")")()..text:sub(pos2+1)
+			text = text:sub(1,pos1-1)..loadstring("return function(sub,begin,temp_line,bere_line) return ("..expression..") end")()(sub,begin,temp_line,bere_line)..text:sub(pos2+1)
 		end
 	end
 	return text
 end
 
-function do_replace(sub, temp, bere, class, mode)--return int
+function do_replace(sub, temp, bere, class, mode, begin)--return int
 	if sub[bere].comment or not sub[bere].effect:find("^beretag") then return 0 end--若该行被注释或为非beretag行，则跳过
 --判断该行class是否与模板行class有交集
     local re,line_class=false,get_bere_class(sub[bere].effect)
@@ -129,7 +131,7 @@ function do_replace(sub, temp, bere, class, mode)--return int
 		find_pos, kdur_num = pos2+1, kdur_num+1
 	end
 --执行replace
-	local temp_tag, temp_retag, temp_add_text = sub[temp].text:match("^{(.-)}"), sub[temp].text:match("^{.-}{(.-)}"), sub[temp].text:match("^{.-}{.-}(.*)")
+	local temp_tag, temp_re_tag, temp_add_text = sub[temp].text:match("^{(.-)}"), sub[temp].text:match("^{.-}{(.-)}"), sub[temp].text:match("^{.-}{.-}(.*)")
     if mode%10==0 then--根据mode判断替换方式以修改insert_line
 		--循环找到insert_line里所有的temp_tag
 		if temp_tag=="" then--考虑到{}的情况
@@ -141,11 +143,16 @@ function do_replace(sub, temp, bere, class, mode)--return int
 		while true do
 			local pos1, pos2 = insert_line.text:find(temp_tag,find_pos)--记录找到的temp_tag位置
 			if not pos1 then break end
-			--先在}后插入temp_add_text，再替换temp_tag为temp_retag
+			--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
 			local pos3 = insert_line.text:find("}",pos2+1)--记录temp_tag后的}的位置
-			insert_line.text = insert_line.text:sub(1,pos3)..temp_add_text..insert_line.text:sub(pos3+1)--插入temp_add_text
-			insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_retag,re_num)..insert_line.text:sub(pos2+1)
-			find_pos, re_num=pos3+1, re_num+1
+
+			local new_temp_add_text=var_expansion(temp_add_text,re_num,sub,begin,temp,bere)
+			insert_line.text = insert_line.text:sub(1,pos3)..new_temp_add_text..insert_line.text:sub(pos3+1)--插入new_temp_add_text
+			pos3 = pos3 + new_temp_add_text:len() - insert_line.text:len()--因为temp_tag含有正则表达式，无法直接获取长度，所以pos3先减原长，循环结束时再加新长
+
+			local new_temp_re_tag=var_expansion(temp_re_tag,re_num,sub,begin,temp,bere)
+			insert_line.text = insert_line.text:sub(1,pos1-1)..new_temp_re_tag..insert_line.text:sub(pos2+1)--插入new_temp_re_tag
+			find_pos, re_num = pos3 + insert_line.text:len() + 1, re_num+1
 		end
     elseif mode%10==1 then
 
@@ -190,7 +197,7 @@ function do_macro(sub)
 			local bere=begin
             while bere<=#sub do
 				if mode%10==0 then--根据mode判断是否替换
-					local skip = do_replace(sub, temp, bere, class, mode)
+					local skip = do_replace(sub, temp, bere, class, mode, begin)
 					bere = bere + skip + 1
 				elseif mode%10==1 then
 			
