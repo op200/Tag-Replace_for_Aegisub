@@ -3,26 +3,14 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "0.1.3"
-
-require("karaskel")
+script_version = "0.1.4"
 
 local user_var={--自定义变量键值表
-	kdur={0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
-	meta,
-	styles,
+	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
 	begin,
 	temp_line,
 	bere_line
 }
-
-function debug(sub,t,is)
-	if is then
-		local s=sub[t+1]
-		s.text="debug"
-		sub[t+1]=s
-	end
-end
 
 function get_temp_class(effect)--return table
 	local class={}
@@ -92,7 +80,7 @@ function var_expansion(text, re_num, sub)--input文本和replace次数，通过r
 			elseif var=="mid" then
 				text = text:sub(1,pos1-1)..math.floor((user_var.kdur[re_num-1] + user_var.kdur[re_num]) * 5)..text:sub(pos2+1)
 			else
-				text = text:sub(1,pos1-1)..user_var[var]..text:sub(pos2+1)
+				text = text:sub(1,pos1-1).."user_var."..var..text:sub(pos2+1)
 			end
 		end
 	end
@@ -102,9 +90,12 @@ function var_expansion(text, re_num, sub)--input文本和replace次数，通过r
 		if not pos1 then break end
 		local expression = text:sub(pos1+1,pos2-1)
 		if not (expression=="") then
-			text = text:sub(1,pos1-1)..loadstring("return function(sub,user_var) "..expression.." end")()(sub,user_var)..text:sub(pos2+1)
+			local return_str = loadstring("return function(sub,user_var) "..expression.." end")()(sub,user_var)
+			if not return_str then return_str="" end
+			text = text:sub(1,pos1-1)..return_str..text:sub(pos2+1)
 		end
 	end
+
 	return text
 end
 
@@ -217,8 +208,27 @@ function do_macro(sub)
     end
 end
 
+function user_code(sub)--运行自定义预处理code行
+	for i=find_event(sub),#sub do
+		if sub[i].comment and sub[i].effect:find("^template#ppcode$") then
+			var_expansion(sub[i].text, 2, sub)
+		end
+	end
+end
+
+function user_require(sub)--自定义文件引用
+	for i=find_event(sub),#sub do
+		if sub[i].comment and sub[i].effect:find("^retag@require$") then
+			for filename in sub[i].text:gmatch("[^;]+") do
+				require(filename)
+			end
+		end
+	end
+end
+
 function macro_processing_function(subtitles,selected_lines)--Execute Macro. 执行宏
-	user_var.meta, user_var.styles = karaskel.collect_head(subtitles, false)
+	user_require(subtitles)
+	user_code(subtitles)
     do_macro(subtitles)
 end
 
