@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "0.1.5"
+script_version = "0.1.6"
 
 local user_var={--自定义变量键值表
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
@@ -237,18 +237,7 @@ function user_code(sub)--运行自定义预处理code行
 	end
 end
 
-function user_require(sub)--自定义文件引用
-	for i=find_event(sub),#sub do
-		if sub[i].comment and sub[i].effect:find("^retag@require$") then
-			for filename in sub[i].text:gmatch("[^;]+") do
-				require(filename)
-			end
-		end
-	end
-end
-
 function macro_processing_function(subtitles,selected_lines)--Execute Macro. 执行宏
-	user_require(subtitles)
 	user_code(subtitles)
     do_macro(subtitles)
 end
