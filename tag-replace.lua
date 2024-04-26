@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "0.1.4"
+script_version = "0.1.5"
 
 local user_var={--自定义变量键值表
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
@@ -114,7 +114,7 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
     ::start::
     if not re then return 0 end
 --准备replace
-	local insert_line=sub[bere]
+	local insert_line, insert_table=sub[bere], {}
 	local find_pos, kdur_num=1, 2
 	while true do--写入kdur表
 		local pos1, pos2 = insert_line.text:find("\\k%d*",find_pos)
@@ -128,16 +128,16 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 	end
 --执行replace
 	local temp_tag, temp_re_tag, temp_add_text = sub[temp].text:match("^{(.-)}"), sub[temp].text:match("^{.-}{(.-)}"), sub[temp].text:match("^{.-}{.-}(.*)")
-    if mode%10==0 then--根据mode判断替换方式以修改insert_line
+	--根据mode判断替换方式以修改insert值
+    if mode%10==0 then
 		--循环找到insert_line里所有的temp_tag
 		if temp_tag=="" then--考虑到{}的情况
 			temp_tag="none"
 			insert_line.text = insert_line.text:gsub("}","none}")
 		end
-		local user_var=user_var--修改变量键值表
 		local find_pos, re_num=1, 2--re_num从2开始计数
 		while true do
-			local pos1, pos2 = insert_line.text:find(temp_tag,find_pos)--记录找到的temp_tag位置
+			local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
 			if not pos1 then break end
 			--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
 			local pos3 = insert_line.text:find("}",pos2+1)--记录temp_tag后的}的位置
@@ -151,8 +151,23 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 			find_pos, re_num = pos3 + insert_line.text:len() + 1, re_num+1
 		end
     elseif mode%10==1 then
-
-    elseif mode%10==2 then
+		--找到每个temp_tag的位置，将这些位置(除了第一个)前面的{的位置和结尾的位置写入pos_table，根据pos_table写入insert_table，最后替换insert_table的值
+		local pos_table={}
+		local find_pos, re_num=1, 2
+		while true do--写入pos_table
+			local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
+			if not pos1 then break end
+			local isfind=false
+			while pos1>=1 do
+				if insert_line.text:byte(pos1)==string.byte("{") then
+					isfind=true
+					break
+				end
+				pos1=pos1-1
+			end
+			if isfind then table.insert(pos_table,pos1) end
+			find_pos, re_num = insert_line.text:find("}",pos2+1)+1, re_num+1
+		end
 
     end
 
@@ -175,7 +190,7 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 end
 
 function find_event(sub)
-    for i=1,#sub do--Find dialogue lines to reduce if judgments. 找到对话行以减少if判断
+    for i=1,#sub do
         if sub[i].section=="[Events]" then
             return i
         end
@@ -187,23 +202,29 @@ function do_macro(sub)
 	local temp=begin
 	user_var.begin=begin
 	initialize(sub,begin)--初始化，删除所有beretag!行，并还原:beretag@行
-    while temp<=#sub do--Find template lines. 检索模板行
-		-- if temp>#sub then break end--debug用
-        if sub[temp].comment and sub[temp].effect:find("^template@[%w,]-#[%w,]*$") then
-            local class,mode=get_temp_class(sub[temp].effect),get_mode(sub[temp].effect)
-			local bere=begin
-            while bere<=#sub do
-				if mode%10==0 then--根据mode判断是否替换
-					user_var.temp_line, user_var.bere_line=temp, bere
-					local skip = do_replace(sub, temp, bere, class, mode, begin)
-					bere = bere + skip + 1
-				elseif mode%10==1 then
-			
-				elseif mode%10==2 then
-			
+    while temp<=#sub do
+		if sub[temp].comment then
+		--Find template lines. 检索模板行
+			if sub[temp].effect:find("^template@[%w,]-#[%w,]*$") then
+				local class,mode=get_temp_class(sub[temp].effect),get_mode(sub[temp].effect)
+				local bere=begin
+				while bere<=#sub do
+					if mode%10==0 then--根据mode判断是否替换
+						user_var.temp_line, user_var.bere_line=temp, bere
+						local skip = do_replace(sub, temp, bere, class, mode, begin)
+						bere = bere + skip + 1
+					elseif mode%10==1 then
+						user_var.temp_line, user_var.bere_line=temp, bere
+						local skip = do_replace(sub, temp, bere, class, mode, begin)
+						bere = bere + skip + 1
+					end
 				end
-            end
-        end
+			end
+		--检索命令行
+			if sub[temp].effect:find("^template#code$") then
+				var_expansion(sub[temp].text, 2, sub)
+			end
+		end
 		temp=temp+1
     end
 end
