@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "0.1.6"
+script_version = "0.1.7"
 
 local user_var={--自定义变量键值表
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
@@ -34,7 +34,7 @@ function get_mode(effect)--return int
 	local modestring = effect:match("#(.*)$")
 	if modestring:len()==0 then
 		return 0
-	elseif modestring:len()==1 then
+	elseif modestring:match("%d+")==modestring then
 		return tonumber(modestring)
 	end
 
@@ -137,18 +137,32 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 		end
 		local find_pos, re_num=1, 2--re_num从2开始计数
 		while true do
-			local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
-			if not pos1 then break end
-			--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
-			local pos3 = insert_line.text:find("}",pos2+1)--记录temp_tag后的}的位置
+			if math.floor(mode/100)%10 == 0 then--mode 100
+				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
+				if not pos1 then break end
+				--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
+				local pos3 = insert_line.text:find("}",pos2+1)--记录temp_tag后的}的位置
 
-			local new_temp_add_text=var_expansion(temp_add_text,re_num,sub)
-			insert_line.text = insert_line.text:sub(1,pos3)..new_temp_add_text..insert_line.text:sub(pos3+1)--插入new_temp_add_text
-			pos3 = pos3 + new_temp_add_text:len() - insert_line.text:len()--因为temp_tag含有正则表达式，无法直接获取长度，所以pos3先减原长，循环结束时再加新长
+				local new_temp_add_text=var_expansion(temp_add_text,re_num,sub)
+				insert_line.text = insert_line.text:sub(1,pos3)..new_temp_add_text..insert_line.text:sub(pos3+1)--插入new_temp_add_text
+				pos3 = pos3 + new_temp_add_text:len() - insert_line.text:len()--因为temp_tag含有正则表达式，无法直接获取长度，所以pos3先减原长，循环结束时再加新长
 
-			local new_temp_re_tag=var_expansion(temp_re_tag,re_num,sub)
-			insert_line.text = insert_line.text:sub(1,pos1-1)..new_temp_re_tag..insert_line.text:sub(pos2+1)--插入new_temp_re_tag
-			find_pos, re_num = pos3 + insert_line.text:len() + 1, re_num+1
+				insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_re_tag,re_num,sub)..insert_line.text:sub(pos2+1)--插入temp_re_tag
+				--mode 000 部分
+					find_pos = insert_line.text:find("{", pos3 + insert_line.text:len() + 1)
+					if not find_pos then break end
+				--
+				re_num = re_num+1
+			else--mode 100
+				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
+				if not pos1 then break end
+
+				find_pos = pos2 + 1 - insert_line.text:len()--先减原长再加新长，防止出现正则表达式导致的字数不同问题
+				insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_re_tag,re_num,sub)..insert_line.text:sub(pos2+1)--插入temp_re_tag
+				find_pos = find_pos + insert_line.text:len()
+
+				re_num = re_num+1
+			end
 		end
     elseif mode%10==1 then
 		--找到每个temp_tag的位置，将这些位置(除了第一个)前面的{的位置和结尾的位置写入pos_table，根据pos_table写入insert_table，最后替换insert_table的值
@@ -167,8 +181,9 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 			end
 			if isfind then table.insert(pos_table,pos1) end
 			find_pos, re_num = insert_line.text:find("}",pos2+1)+1, re_num+1
+			table.insert(pos_table,pos1)
 		end
-
+		pos_table[1]=1
     end
 
 --判断该行类型，第一次替换则注释该行，多次替换则删除该行
@@ -206,10 +221,10 @@ function do_macro(sub)
 		if sub[temp].comment then
 		--Find template lines. 检索模板行
 			if sub[temp].effect:find("^template@[%w,]-#[%w,]*$") then
-				local class,mode=get_temp_class(sub[temp].effect),get_mode(sub[temp].effect)
+				local class, mode = get_temp_class(sub[temp].effect), get_mode(sub[temp].effect)
 				local bere=begin
 				while bere<=#sub do
-					if mode%10==0 then--根据mode判断是否替换
+					if mode%10==0 then--根据mode判断
 						user_var.temp_line, user_var.bere_line=temp, bere
 						local skip = do_replace(sub, temp, bere, class, mode, begin)
 						bere = bere + skip + 1
