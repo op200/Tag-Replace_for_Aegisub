@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "0.1.7"
+script_version = "0.2"
 
 local user_var={--自定义变量键值表
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
@@ -40,8 +40,22 @@ function get_mode(effect)--return int
 
 	local mode=0
 	for world in modestring:gmatch("[^;]+") do--判断mode，返回对应int值
-		if world=="rmtag" and mode%10<1 then mode=1
-		elseif world=="rmalltag" and mode%10<2 then mode=2
+		if world=="cuttag" and mode%10 == 0 then
+			mode = math.floor(mode/10)*10 + 1
+		elseif world=="strictstyle" and math.floor(mode/10)%10 < 3 then
+			if math.floor(mode/10)%10 == 0 then
+				mode = math.floor(mode/100)*100 + 10 + mode%10
+			elseif math.floor(mode/10)%10 == 2 then
+				mode = math.floor(mode/100)*100 + 30 + mode%10
+			end
+		elseif world=="strictname" and math.floor(mode/10)%10 < 3 then
+			if math.floor(mode/10)%10 == 0 then
+				mode = math.floor(mode/100)*100 + 20 + mode%10
+			elseif math.floor(mode/10)%10 == 1 then
+				mode = math.floor(mode/100)*100 + 30 + mode%10
+			end
+		elseif world=="findtext" and math.floor(mode/100)%10 == 0 then
+			mode = math.floor(mode/1000)*1000 + 100 + mode%100
 		end
 	end
 	return mode
@@ -127,17 +141,18 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 		find_pos, kdur_num = pos2+1, kdur_num+1
 	end
 --执行replace
-	local temp_tag, temp_re_tag, temp_add_text = sub[temp].text:match("^{(.-)}"), sub[temp].text:match("^{.-}{(.-)}"), sub[temp].text:match("^{.-}{.-}(.*)")
+	local temp_tag, temp_add_tail = sub[temp].text:match("^{(.-)}"), sub[temp].text:match("^{.-}(.*)")
+	local temp_re_tag, temp_add_text = temp_add_tail:match("^{(.-)}"), temp_add_tail:match("^{.-}(.*)")
+	local find_pos, re_num=1, 2 --re_num从2开始计数
 	--根据mode判断替换方式以修改insert值
-    if mode%10==0 then
+    if mode%10==0 then--mode 0
 		--循环找到insert_line里所有的temp_tag
 		if temp_tag=="" then--考虑到{}的情况
 			temp_tag="none"
 			insert_line.text = insert_line.text:gsub("}","none}")
 		end
-		local find_pos, re_num=1, 2--re_num从2开始计数
 		while true do
-			if math.floor(mode/100)%10 == 0 then--mode 100
+			if math.floor(mode/100)%10 == 0 then--mode 0*0
 				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
 				if not pos1 then break end
 				--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
@@ -153,55 +168,80 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 					if not find_pos then break end
 				--
 				re_num = re_num+1
-			else--mode 100
+			else--mode 1*0
 				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
 				if not pos1 then break end
 
 				find_pos = pos2 + 1 - insert_line.text:len()--先减原长再加新长，防止出现正则表达式导致的字数不同问题
-				insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_re_tag,re_num,sub)..insert_line.text:sub(pos2+1)--插入temp_re_tag
+				insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_add_tail,re_num,sub)..insert_line.text:sub(pos2+1)--插入temp_add_tail
 				find_pos = find_pos + insert_line.text:len()
 
 				re_num = re_num+1
 			end
 		end
-    elseif mode%10==1 then
+    else--mode 1
 		--找到每个temp_tag的位置，将这些位置(除了第一个)前面的{的位置和结尾的位置写入pos_table，根据pos_table写入insert_table，最后替换insert_table的值
 		local pos_table={}
-		local find_pos, re_num=1, 2
-		while true do--写入pos_table
-			local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
-			if not pos1 then break end
-			local isfind=false
-			while pos1>=1 do
-				if insert_line.text:byte(pos1)==string.byte("{") then
-					isfind=true
-					break
+		if math.floor(mode/100)%10 == 0 then--mode 0*1
+			while true do--写入pos_table
+				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
+				if not pos1 then break end
+				local isfind=false
+				while pos1>=1 do
+					if insert_line.text:byte(pos1)==string.byte("{") then
+						isfind=true
+						break
+					end
+					pos1=pos1-1
 				end
-				pos1=pos1-1
+				if isfind then table.insert(pos_table,pos1) end
+				find_pos, re_num = insert_line.text:find("}",pos2+1)+1, re_num+1
 			end
-			if isfind then table.insert(pos_table,pos1) end
-			find_pos, re_num = insert_line.text:find("}",pos2+1)+1, re_num+1
-			table.insert(pos_table,pos1)
+
+			pos_table[1], re_num=1, 2
+			table.insert(pos_table,insert_line.text:len()+1)
+			for i=1,#pos_table-1 do
+				local new_text = insert_line.text:sub(pos_table[i],pos_table[i+1]-1)
+				local pos1, pos2 = new_text:find(var_expansion(temp_tag,re_num,sub))
+				new_text = new_text:sub(1,pos1-1) .. var_expansion(temp_re_tag,re_num,sub) .. new_text:sub(pos2+1)
+				table.insert(insert_table, new_text)
+				re_num = re_num+1
+			end
+		else--mode 1*1
 		end
-		pos_table[1]=1
     end
 
 --判断该行类型，第一次替换则注释该行，多次替换则删除该行
+	function _do_insert(pos,insert_content)
+		if mode%10==0 then--mode 0
+			sub.insert(pos,insert_content)
+			return 0
+		end
+		--mode 1
+		local i=1
+		while i<=#insert_table do
+			insert_content.text = insert_table[i]
+			sub.insert(pos+i-1,insert_content)
+			i=i+1
+		end
+		return i-2
+	end
+
 	if sub[bere].effect:find("^beretag!") then--删除行
 		--这里插入和删除的顺序不能更改，否则会导致逆天bug
-		sub.insert(bere+1,insert_line)
+		local add_line_num = _do_insert(bere+1,insert_line)
 		sub.delete(bere)
-		return 0
+		return add_line_num
 	end
 --注释行，并在effect头部加上:
-	local tocmt=sub[bere]
-	tocmt.comment=true
-	tocmt.effect=":"..tocmt.effect
-	sub[bere]=tocmt
+		local tocmt=sub[bere]
+		tocmt.comment=true
+		tocmt.effect=":"..tocmt.effect
+		sub[bere]=tocmt
 --将@改为!
-	insert_line.effect="beretag!"..insert_line.effect:sub(9)
-	sub.insert(bere+1,insert_line)
-	return 1
+		insert_line.effect="beretag!"..insert_line.effect:sub(9)
+		local add_line_num = _do_insert(bere+1,insert_line)
+		return add_line_num+1
 end
 
 function find_event(sub)
@@ -222,16 +262,42 @@ function do_macro(sub)
 		--Find template lines. 检索模板行
 			if sub[temp].effect:find("^template@[%w,]-#[%w,]*$") then
 				local class, mode = get_temp_class(sub[temp].effect), get_mode(sub[temp].effect)
-				local bere=begin
-				while bere<=#sub do
-					if mode%10==0 then--根据mode判断
+				local bere = begin
+				local match_mode = math.floor(mode/10)%10
+				user_var.match=match_mode
+				--根据mode判断
+				if match_mode==0 then
+					while bere <= #sub do
 						user_var.temp_line, user_var.bere_line=temp, bere
 						local skip = do_replace(sub, temp, bere, class, mode, begin)
 						bere = bere + skip + 1
-					elseif mode%10==1 then
-						user_var.temp_line, user_var.bere_line=temp, bere
-						local skip = do_replace(sub, temp, bere, class, mode, begin)
-						bere = bere + skip + 1
+					end
+				elseif match_mode==1 then
+					while bere <= #sub do
+						if sub[temp].style == sub[bere].style then
+							user_var.temp_line, user_var.bere_line=temp, bere
+							bere = bere + 1 + do_replace(sub, temp, bere, class, mode, begin)
+						else
+							bere = bere + 1
+						end
+					end
+				elseif match_mode==2 then
+					while bere <= #sub do
+						if sub[temp].actor == sub[bere].actor then
+							user_var.temp_line, user_var.bere_line=temp, bere
+							bere = bere + 1 + do_replace(sub, temp, bere, class, mode, begin)
+						else
+							bere = bere + 1
+						end
+					end
+				elseif match_mode==3 then
+					while bere <= #sub do
+						if sub[temp].style == sub[bere].style and sub[temp].actor == sub[bere].actor then
+							user_var.temp_line, user_var.bere_line=temp, bere
+							bere = bere + 1 + do_replace(sub, temp, bere, class, mode, begin)
+						else
+							bere = bere + 1
+						end
 					end
 				end
 			end
