@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.0.1"
+script_version = "1.0.2"
 
 local user_var={--自定义变量键值表
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
@@ -278,7 +278,8 @@ local function do_macro(sub)
 				if mode.keyframe then
 					local find_end = #sub
 					while bere<=find_end do--找到bere行
-						if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[temp].effect,sub[bere].effect) then
+						if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[temp].effect,sub[bere].effect) 
+							and (not mode.strictname or sub[temp].actor==sub[bere].actor) and (not mode.strictstyle or sub[temp].style==sub[bere].style) then
 							if sub[bere].text:find([[\pos%([^,]*,[^,]*%)]]) then
 							--补全tag
 								local key_line = sub[bere]
@@ -427,8 +428,8 @@ local function do_macro(sub)
 						bere = bere+1
 					end
 					-- aegisub.dialog.display({{class="label",label=sub[find_end].actor}})
+					bere = begin
 				end
-				bere = begin
 				if mode.strictstyle then
 					if mode.strictname then
 						while bere <= #sub - append_num do
