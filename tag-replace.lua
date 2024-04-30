@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.0.2"
+script_version = "1.1"
 
 local user_var={--自定义变量键值表
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
@@ -461,7 +461,6 @@ local function do_macro(sub)
 					end
 				else
 					while bere <= #sub - append_num do
-						-- aegisub.dialog.display({{class="label",label=get_bere_class(sub[bere].effect)[2]}})
 						user_var.temp_line, user_var.bere_line=temp, bere
 						bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
 					end
@@ -489,14 +488,37 @@ local function macro_processing_function(subtitles)--Execute Macro. 执行宏
 	do_macro(subtitles)
 end
 
--- local function macro_processing_function_selected(subtitles,selected_lines)--Execute Macro in selected lines. 在所选行执行宏
--- 	local sub = {}
--- 	for i,v in ipairs(selected_lines) do
--- 		table.insert(sub,subtitles[v])
--- 	end
--- 	user_code(sub)
--- 	do_macro(sub)
--- end
+local function comment_template_line(sub,selected_table)
+	for i=find_event(sub),#sub do
+		if selected_table[tostring(i)]~=true and sub[i].effect:find("^template[@#]") and sub[i].comment then
+			local line = sub[i]
+			line.effect = ":"..line.effect
+			sub[i] = line
+		end
+	end
+end
+
+local function uncomment_template_line(sub)
+	for i=find_event(sub),#sub do
+		if sub[i].effect:find("^:template") then
+			local line = sub[i]
+			line.effect = line.effect:sub(2)
+			sub[i] = line
+		end
+	end
+end
+
+local function macro_processing_function_selected(subtitles,selected_lines)--Execute Macro in selected lines. 在所选行执行宏
+	--搜索所有非所选的template行，对其中注释行头部添加:，执行完后再还原
+	local selected_table={}
+	for i,v in ipairs(selected_lines) do
+		selected_table[tostring(v)]=true
+	end
+	comment_template_line(subtitles,selected_table)
+	user_code(subtitles)
+	do_macro(subtitles)
+	uncomment_template_line(subtitles)
+end
 
 local function macro_processing_function_initialize(subtitles)--初始化
 	initialize(subtitles,find_event(subtitles))
@@ -507,5 +529,5 @@ local function macro_validation_function()--判断是否可执行
 end
 
 aegisub.register_macro(gt"Tag Replace Apply", gt"Replace all strings with your settings", macro_processing_function, macro_validation_function)
--- aegisub.register_macro(gt"Tag Replace Apply in selected lines", gt"Replace selected lines' strings with your settings", macro_processing_function_selected, macro_validation_function)
+aegisub.register_macro(gt"Tag Replace Apply in selected lines", gt"Replace selected lines' strings with your settings", macro_processing_function_selected, macro_validation_function)
 aegisub.register_macro(gt"Tag Replace Initialize", gt"Only do the initialize function", macro_processing_function_initialize)
