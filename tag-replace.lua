@@ -3,41 +3,46 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "0.3"
+script_version = "1.0"
 
 local user_var={--自定义变量键值表
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
 	begin,
 	temp_line,
-	bere_line
+	bere_line,
+	keyfile=""
 }
 
-function get_temp_class(effect)--return table
-	local class={}
-	for word in effect:match("@(.*)#"):gmatch("[^;]+") do
-		table.insert(class,word)
+local function cmp_class(temp_effct,bere_effct)
+	local temp_class={}
+	for word in temp_effct:match("@(.*)#"):gmatch("[^;]+") do
+		table.insert(temp_class,word)
 	end
-	return class
+
+	local bere_class={}
+	if bere_effct:find("^beretag[@!]") then
+		for word in bere_effct:match("[@!]([^#]*)$"):gmatch("[^;]+") do
+			table.insert(bere_class,word)
+		end
+	end
+
+	for i,j in ipairs(temp_class) do
+		for p,k in ipairs(bere_class) do
+			if j==k then return true end
+		end
+	end
+	return false
 end
 
-function get_bere_class(effect)--return table
-	local classstring = effect:match("[@!]([^#]*)$")
-	if not classstring then return {} end
-	local class={}
-	for word in classstring:gmatch("[^;]+") do
-		table.insert(class,word)
-	end
-	return class
-end
-
-function get_mode(effect)--return table
+local function get_mode(effect)--return table
 	local modestring = effect:match("#(.*)$")
 	local mode={
 		cuttag=false,
 		strictstyle=false,
 		strictname=false,
 		findtext=false,
-		append=false
+		append=false,
+		keyframe=false
 	}
 	if modestring:len()==0 then
 		return mode
@@ -51,7 +56,7 @@ function get_mode(effect)--return table
 	return mode
 end
 
-function initialize(sub,begin)
+local function initialize(sub,begin)
 	local findline=begin
 	while findline<=#sub do
 		if sub[findline].effect:find("^beretag!") and not sub[findline].comment then--删除beretag!行
@@ -68,7 +73,7 @@ function initialize(sub,begin)
 	end
 end
 
-function var_expansion(text, re_num, sub)--input文本和replace次数，通过re_num映射karaok变量至变量表
+local function var_expansion(text, re_num, sub)--input文本和replace次数，通过re_num映射karaok变量至变量表
 	--扩展变量
 	while true do
 		local pos1, pos2 = text:find("%$%w+")
@@ -97,26 +102,15 @@ function var_expansion(text, re_num, sub)--input文本和replace次数，通过r
 		if not return_str then return_str="" end
 		text = text:sub(1,pos1-1)..return_str..text:sub(pos2+1)
 	end
-
 	return text
 end
 
 local append_num
 
-function do_replace(sub, temp, bere, class, mode, begin)--return int
+local function do_replace(sub, temp, bere, mode, begin)--return int
 	if sub[bere].comment or not sub[bere].effect:find("^beretag") then return 0 end--若该行被注释或为非beretag行，则跳过
 --判断该行class是否与模板行class有交集
-	local re,line_class=false,get_bere_class(sub[bere].effect)
-	for i=1,#line_class do
-		for p=1,#class do
-			if line_class[i]==class[p] then
-				re=true
-				goto start
-			end
-		end
-	end
-	::start::
-	if not re then return 0 end
+	if not cmp_class(sub[temp].effect,sub[bere].effect) then return 0 end
 --准备replace
 	local insert_line, insert_table=sub[bere], {}
 	local find_pos, kdur_num=1, 2
@@ -131,10 +125,10 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 		find_pos, kdur_num = pos2+1, kdur_num+1
 	end
 --执行replace
+	--根据mode判断替换方式
 	local temp_tag, temp_add_tail = sub[temp].text:match("^{(.-)}"), sub[temp].text:match("^{.-}(.*)")
 	local temp_re_tag, temp_add_text = temp_add_tail:match("^{(.-)}"), temp_add_tail:match("^{.-}(.*)")
 	local find_pos, re_num=1, 2 --re_num从2开始计数
-	--根据mode判断替换方式以修改insert值
 	if mode.cuttag then
 		--找到每个temp_tag的位置，将这些位置(除了第一个)前面的{的位置和结尾的位置写入pos_table，根据pos_table写入insert_table，最后替换insert_table的值
 		local pos_table={}
@@ -214,7 +208,7 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 	end
 
 --判断该行类型，第一次替换则注释该行，多次替换则删除该行
-	function _do_insert(pos,insert_content)
+	local function _do_insert(pos,insert_content)
 		if mode.cuttag then
 			local i=1
 			if mode.append then
@@ -260,7 +254,7 @@ function do_replace(sub, temp, bere, class, mode, begin)--return int
 		return add_line_num+1
 end
 
-function find_event(sub)
+local function find_event(sub)
 	for i=1,#sub do
 		if sub[i].section=="[Events]" then
 			return i
@@ -268,7 +262,7 @@ function find_event(sub)
 	end
 end
 
-function do_macro(sub)
+local function do_macro(sub)
 	local begin=find_event(sub)
 	local temp=begin
 	user_var.begin=begin
@@ -278,15 +272,169 @@ function do_macro(sub)
 		if sub[temp].comment then
 		--Find template lines. 检索模板行
 			if sub[temp].effect:find("^template@[%w;]-#[%w;]*$") then
-				local class, mode = get_temp_class(sub[temp].effect), get_mode(sub[temp].effect)
+				local mode = get_mode(sub[temp].effect)
 				local bere = begin
 				--根据mode判断
+				if mode.keyframe then
+					local find_end = #sub
+					while bere<=find_end do--找到bere行
+						if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[temp].effect,sub[bere].effect) then
+							if sub[bere].text:find([[\pos%([^,]*,[^,]*%)]]) then
+							--补全tag
+								local key_line = sub[bere]
+								if not sub[bere].text:find([[\fscx%d]]) then
+									local pos = key_line.text:find("}")
+									key_line.text = key_line.text:sub(1,pos-1)..[[\fscx100]]..key_line.text:sub(pos)
+								end
+								if not sub[bere].text:find([[\fscy%d]]) then
+									local pos = key_line.text:find("}")
+									key_line.text = key_line.text:sub(1,pos-1)..[[\fscy100]]..key_line.text:sub(pos)
+								end
+								if not sub[bere].text:find([[\frz%d]]) then
+									local pos = key_line.text:find("}")
+									key_line.text = key_line.text:sub(1,pos-1)..[[\frz0]]..key_line.text:sub(pos)
+								end
+							--注释bere行
+								key_line.effect = ":"..key_line.effect
+								key_line.comment = true
+								sub[bere] = key_line
+								key_line.effect = "beretag!"..key_line.effect:sub(9)
+								key_line.comment = false
+							--开始读取文件
+								--判断file是否可打开
+								local file = io.open(user_var.keyfile)--这个io.open是unicode-monkeypatch.lua里重载的
+								local line=file:read("l")
+								if not file then
+									aegisub.dialog.display({{class="label",label="keyframe file doesn't exist"}})
+								end
+								if line=="Adobe After Effects 6.0 Keyframe Data" then
+									file:read("l")
+									local fps = file:read("l"):match("%d+%.%d+")
+									local time_start, step_num, time_end = key_line.start_time, 1
+									while line~=[[	Frame	X pixels	Y pixels	Z pixels]] do
+										line=file:read("l")
+									end
+									local key_pos, key_scale, key_rot = {},{},{}
+									while true do--read Position
+										if not file:read("n") then break end
+										table.insert(key_pos,{file:read("n"),file:read("n")})
+										file:read("n")
+									end
+									file:read("l") file:read("l")
+									while true do--read Scale
+										if not file:read("n") then break end
+										table.insert(key_scale,{file:read("n"),file:read("n")})
+										file:read("n")
+									end
+									file:read("l") file:read("l")
+									while true do--read Rotation
+										if not file:read("n") then break end
+										table.insert(key_rot,{file:read("n")})
+									end
+									file:close()
+								--开始插入行
+									local x,y,fx,fy,fz
+									local pos_table, out_value = {1,#key_line.text}, {}
+									
+									local pos1,pos2 = key_line.text:find([[\pos%([^,]*,]])
+									x = key_line.text:sub(pos1+5,pos2-1)
+									table.insert(out_value,{pos1,x,key_pos,1})
+									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2)
+	
+									pos1,pos2 = key_line.text:find([[,[^,]*%)]],pos2)
+									y = key_line.text:sub(pos1+1,pos2-1)
+									table.insert(out_value,{pos1,y,key_pos,2})
+									table.insert(pos_table,pos1) table.insert(pos_table,pos2)
+	
+									pos1,pos2 = key_line.text:find([[\fscx[%d%.]+]])
+									fx = key_line.text:sub(pos1+5,pos2)
+									table.insert(out_value,{pos1,fx,key_scale,1})
+									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2+1)
+	
+									pos1,pos2 = key_line.text:find([[\fscy[%d%.]+]])
+									fy = key_line.text:sub(pos1+5,pos2)
+									table.insert(out_value,{pos1,fy,key_scale,2})
+									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2+1)
+	
+									pos1,pos2 = key_line.text:find([[\frz[%d%.]+]])
+									fz = key_line.text:sub(pos1+4,pos2)
+									table.insert(out_value,{pos1,fz,key_rot,1})
+									table.insert(pos_table,pos1+3) table.insert(pos_table,pos2+1)
+									
+									local function cmp(a,b)
+										return a[1] < b[1]
+									end
+									table.sort(out_value,cmp) table.sort(pos_table)
+	
+									local insert_key_line_table, insert_key_line = {
+										key_line.text:sub(pos_table[1],pos_table[2]),
+										key_line.text:sub(pos_table[3],pos_table[4]),
+										key_line.text:sub(pos_table[5],pos_table[6]),
+										key_line.text:sub(pos_table[7],pos_table[8]),
+										key_line.text:sub(pos_table[9],pos_table[10]),
+										key_line.text:sub(pos_table[11],pos_table[12])
+									}
+									--根据mode插入
+									time_end = time_start
+									if mode.append then
+										for i=1,#key_rot do
+											insert_key_line = key_line
+											insert_key_line.text =
+												insert_key_line_table[1] .. math.floor((out_value[1][3][i][out_value[1][4]]-out_value[1][3][1][out_value[1][4]]+out_value[1][2])*100+0.5)/100 ..
+												insert_key_line_table[2] .. math.floor((out_value[2][3][i][out_value[2][4]]-out_value[2][3][1][out_value[2][4]]+out_value[2][2])*100+0.5)/100 ..
+												insert_key_line_table[3] .. math.floor((out_value[3][3][i][out_value[3][4]]-out_value[3][3][1][out_value[3][4]]+out_value[3][2])*100+0.5)/100 ..
+												insert_key_line_table[4] .. math.floor((out_value[4][3][i][out_value[4][4]]-out_value[4][3][1][out_value[4][4]]+out_value[4][2])*100+0.5)/100 ..
+												insert_key_line_table[5] .. math.floor((out_value[5][3][i][out_value[5][4]]-out_value[5][3][1][out_value[5][4]]+out_value[5][2])*100+0.5)/100 ..
+												insert_key_line_table[6]
+	
+											insert_key_line.start_time = time_end
+											time_end = time_start + math.floor(step_num*1000/fps+0.5)
+											insert_key_line.end_time = time_end
+											step_num = step_num+1
+	
+											sub[0] = insert_key_line
+										end
+									else
+										local insert_pos = bere+1
+										for i=1,#key_rot do
+											insert_key_line = key_line
+											insert_key_line.text =
+												insert_key_line_table[1] .. math.floor((out_value[1][3][i][out_value[1][4]]-out_value[1][3][1][out_value[1][4]]+out_value[1][2])*100+0.5)/100 ..
+												insert_key_line_table[2] .. math.floor((out_value[2][3][i][out_value[2][4]]-out_value[2][3][1][out_value[2][4]]+out_value[2][2])*100+0.5)/100 ..
+												insert_key_line_table[3] .. math.floor((out_value[3][3][i][out_value[3][4]]-out_value[3][3][1][out_value[3][4]]+out_value[3][2])*100+0.5)/100 ..
+												insert_key_line_table[4] .. math.floor((out_value[4][3][i][out_value[4][4]]-out_value[4][3][1][out_value[4][4]]+out_value[4][2])*100+0.5)/100 ..
+												insert_key_line_table[5] .. math.floor((out_value[5][3][i][out_value[5][4]]-out_value[5][3][1][out_value[5][4]]+out_value[5][2])*100+0.5)/100 ..
+												insert_key_line_table[6]
+	
+											insert_key_line.start_time = time_end
+											time_end = time_start + math.floor(step_num*1000/fps+0.5)
+											insert_key_line.end_time = time_end
+											step_num = step_num+1
+	
+											sub.insert(insert_pos,insert_key_line)
+											insert_pos = insert_pos+1
+										end
+										find_end = find_end + insert_pos - bere - 1
+										bere = insert_pos - 1
+									end
+								else
+									aegisub.dialog.display({{class="label",label=gt([["]]..tostring(line)..[[" is not supported]])}})
+								end
+							else
+								aegisub.dialog.display({{class="label",label=gt[["\pos" not found]]}})
+							end
+						end
+						bere = bere+1
+					end
+					-- aegisub.dialog.display({{class="label",label=sub[find_end].actor}})
+				end
+				bere = begin
 				if mode.strictstyle then
 					if mode.strictname then
 						while bere <= #sub - append_num do
 							if sub[temp].style == sub[bere].style and sub[temp].actor == sub[bere].actor then
 								user_var.temp_line, user_var.bere_line=temp, bere
-								bere = bere + 1 + do_replace(sub, temp, bere, class, mode, begin)
+								bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
 							else
 								bere = bere + 1
 							end
@@ -295,7 +443,7 @@ function do_macro(sub)
 						while bere <= #sub - append_num do
 							if sub[temp].style == sub[bere].style then
 								user_var.temp_line, user_var.bere_line=temp, bere
-								bere = bere + 1 + do_replace(sub, temp, bere, class, mode, begin)
+								bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
 							else
 								bere = bere + 1
 							end
@@ -305,15 +453,16 @@ function do_macro(sub)
 					while bere <= #sub - append_num do
 						if sub[temp].actor == sub[bere].actor then
 							user_var.temp_line, user_var.bere_line=temp, bere
-							bere = bere + 1 + do_replace(sub, temp, bere, class, mode, begin)
+							bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
 						else
 							bere = bere + 1
 						end
 					end
 				else
 					while bere <= #sub - append_num do
+						-- aegisub.dialog.display({{class="label",label=get_bere_class(sub[bere].effect)[2]}})
 						user_var.temp_line, user_var.bere_line=temp, bere
-						bere = bere + 1 + do_replace(sub, temp, bere, class, mode, begin)
+						bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
 					end
 				end
 			end
@@ -326,7 +475,7 @@ function do_macro(sub)
 	end
 end
 
-function user_code(sub)--运行自定义预处理code行
+local function user_code(sub)--运行自定义预处理code行
 	for i=find_event(sub),#sub do
 		if sub[i].comment and sub[i].effect:find("^template#ppcode$") then
 			var_expansion(sub[i].text, 2, sub)
@@ -334,20 +483,25 @@ function user_code(sub)--运行自定义预处理code行
 	end
 end
 
-function macro_processing_function(subtitles,selected_lines)--Execute Macro. 执行宏
+local function macro_processing_function(subtitles)--Execute Macro. 执行宏
 	user_code(subtitles)
 	do_macro(subtitles)
 end
 
-function macro_processing_function_selected(subtitles,selected_lines)--Execute Macro in selected lines. 在所选行执行宏
-	-- do_macro(selected_lines)
-end
+-- local function macro_processing_function_selected(subtitles,selected_lines)--Execute Macro in selected lines. 在所选行执行宏
+-- 	local sub = {}
+-- 	for i,v in ipairs(selected_lines) do
+-- 		table.insert(sub,subtitles[v])
+-- 	end
+-- 	user_code(sub)
+-- 	do_macro(sub)
+-- end
 
-function macro_processing_function_initialize(subtitles)--初始化
+local function macro_processing_function_initialize(subtitles)--初始化
 	initialize(subtitles,find_event(subtitles))
 end
 
-function macro_validation_function()--判断是否可执行
+local function macro_validation_function()--判断是否可执行
 	return true
 end
 
