@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.0"
+script_version = "1.0.1"
 
 local user_var={--自定义变量键值表
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
@@ -298,7 +298,7 @@ local function do_macro(sub)
 								key_line.effect = ":"..key_line.effect
 								key_line.comment = true
 								sub[bere] = key_line
-								key_line.effect = "beretag!"..key_line.effect:sub(9)
+								key_line.effect = "beretag!"..key_line.effect:sub(10)
 								key_line.comment = false
 							--开始读取文件
 								--判断file是否可打开
