@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.1"
+script_version = "1.1.1"
 
 local user_var={--自定义变量键值表
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
@@ -59,7 +59,7 @@ end
 local function initialize(sub,begin)
 	local findline=begin
 	while findline<=#sub do
-		if sub[findline].effect:find("^beretag!") and not sub[findline].comment then--删除beretag!行
+		if sub[findline].effect:find("^beretag!") then--删除beretag!行
 			sub.delete(findline)
 		elseif sub[findline].effect:find("^:beretag@") then--还原:beretag@行
 			local new_line=sub[findline]
@@ -280,28 +280,7 @@ local function do_macro(sub)
 					while bere<=find_end do--找到bere行
 						if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[temp].effect,sub[bere].effect) 
 							and (not mode.strictname or sub[temp].actor==sub[bere].actor) and (not mode.strictstyle or sub[temp].style==sub[bere].style) then
-							if sub[bere].text:find([[\pos%([^,]*,[^,]*%)]]) then
-							--补全tag
-								local key_line = sub[bere]
-								if not sub[bere].text:find([[\fscx%d]]) then
-									local pos = key_line.text:find("}")
-									key_line.text = key_line.text:sub(1,pos-1)..[[\fscx100]]..key_line.text:sub(pos)
-								end
-								if not sub[bere].text:find([[\fscy%d]]) then
-									local pos = key_line.text:find("}")
-									key_line.text = key_line.text:sub(1,pos-1)..[[\fscy100]]..key_line.text:sub(pos)
-								end
-								if not sub[bere].text:find([[\frz%d]]) then
-									local pos = key_line.text:find("}")
-									key_line.text = key_line.text:sub(1,pos-1)..[[\frz0]]..key_line.text:sub(pos)
-								end
-							--注释bere行
-								key_line.effect = ":"..key_line.effect
-								key_line.comment = true
-								sub[bere] = key_line
-								key_line.effect = "beretag!"..key_line.effect:sub(10)
-								key_line.comment = false
-							--开始读取文件
+							if sub[bere].text:find([[\pos%([^,]*,[^,]*%)]]) then--开始读取文件
 								--判断file是否可打开
 								local file = io.open(user_var.keyfile)--这个io.open是unicode-monkeypatch.lua里重载的
 								local line=file:read("l")
@@ -309,6 +288,33 @@ local function do_macro(sub)
 									aegisub.dialog.display({{class="label",label="keyframe file doesn't exist"}})
 								end
 								if line=="Adobe After Effects 6.0 Keyframe Data" then
+									--补全tag
+									local key_line = sub[bere]
+									if not sub[bere].text:find([[\fscx%d]]) then
+										local pos = key_line.text:find("}")
+										key_line.text = key_line.text:sub(1,pos-1)..[[\fscx100]]..key_line.text:sub(pos)
+									end
+									if not sub[bere].text:find([[\fscy%d]]) then
+										local pos = key_line.text:find("}")
+										key_line.text = key_line.text:sub(1,pos-1)..[[\fscy100]]..key_line.text:sub(pos)
+									end
+									if not sub[bere].text:find([[\frz%d]]) then
+										local pos = key_line.text:find("}")
+										key_line.text = key_line.text:sub(1,pos-1)..[[\frz0]]..key_line.text:sub(pos)
+									end
+									key_line.effect = "beretag!"..key_line.effect:sub(9)
+									--处理bere行
+									if sub[bere].effect:find("^beretag@") then
+										local line = sub[bere]
+										line.effect = ":"..line.effect
+										line.comment = true
+										sub[bere] = line
+									else
+										local line = sub[bere]
+										line.comment = true
+										sub[bere] = line
+									end
+									--开始处理所读内容
 									file:read("l")
 									local fps = file:read("l"):match("%d+%.%d+")
 									local time_start, step_num, time_end = key_line.start_time, 1
@@ -425,9 +431,10 @@ local function do_macro(sub)
 								aegisub.dialog.display({{class="label",label=gt[["\pos" not found]]}})
 							end
 						end
+						--next
 						bere = bere+1
 					end
-					-- aegisub.dialog.display({{class="label",label=sub[find_end].actor}})
+					--end
 					bere = begin
 				end
 				if mode.strictstyle then
