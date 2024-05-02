@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.1.1"
+script_version = "1.2"
 
 local user_var={--自定义变量键值表
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
@@ -339,6 +339,7 @@ local function do_macro(sub)
 										table.insert(key_rot,{file:read("n")})
 									end
 									file:close()
+									table.insert(key_pos,1,key_pos[1]) table.insert(key_scale,1,key_scale[1]) table.insert(key_rot,1,key_rot[1])
 								--开始插入行
 									local x,y,fx,fy,fz
 									local pos_table, out_value = {1,#key_line.text}, {}
@@ -435,6 +436,13 @@ local function do_macro(sub)
 						bere = bere+1
 					end
 					--end
+					bere = begin
+					while bere <= #sub do
+						if sub[bere].effect:find("^beretag!") and sub[bere].comment then
+							sub.delete(bere)
+						end
+						bere = bere+1
+					end
 					bere = begin
 				end
 				if mode.strictstyle then
