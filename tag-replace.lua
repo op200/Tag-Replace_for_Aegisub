@@ -3,14 +3,16 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.1.2"
+script_version = "1.2"
 
 local user_var={--自定义变量键值表
+	subcache={},
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
 	begin,
 	temp_line,
 	bere_line,
-	keyfile=""
+	keyfile="",
+	forcefps=nil
 }
 
 local function cmp_class(temp_effct,bere_effct)
@@ -37,6 +39,7 @@ end
 local function get_mode(effect)--return table
 	local modestring = effect:match("#(.*)$")
 	local mode={
+		recache=false,
 		cuttag=false,
 		strictstyle=false,
 		strictname=false,
@@ -316,7 +319,12 @@ local function do_macro(sub)
 									end
 									--开始处理所读内容
 									file:read("l")
-									local fps = file:read("l"):match("%d+%.%d+")
+									local fps
+									if forcefps then
+										fps = file:read("l"):match("%d+%.%d+")
+									else
+										fps = forcefps
+									end
 									local time_start, step_num, time_end = key_line.start_time, 1
 									while line~=[[	Frame	X pixels	Y pixels	Z pixels]] do
 										line=file:read("l")
@@ -479,10 +487,43 @@ local function do_macro(sub)
 						bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
 					end
 				end
+				if #user_var.subcache > 0 and mode.recache then--插入缓存行
+					for i=1,#user_var.subcache do
+						user_var.subcache[i].effect = "beretag!"..user_var.subcache[i].effect:sub(9)
+					end
+					if mode.append then
+						for i,v in ipairs(user_var.subcache) do
+							sub[0]=v
+						end
+					else
+						for i,v in ipairs(user_var.subcache) do
+							sub.insert(temp+i,v)
+						end
+					end
+					user_var.subcache={}
+				end
 			end
 		--检索命令行
-			if sub[temp].effect:find("^template#code$") then
+			if sub[temp].effect:find("^template#code") then
 				var_expansion(sub[temp].text, 2, sub)
+				if #user_var.subcache > 0 then--插入缓存行
+					mode = get_mode(sub[temp].effect)
+					if mode.recache then
+						for i=1,#user_var.subcache do
+							user_var.subcache[i].effect = "beretag!"..user_var.subcache[i].effect:sub(9)
+						end
+						if mode.append then
+							for i,v in ipairs(user_var.subcache) do
+								sub[0]=v
+							end
+						else
+							for i,v in ipairs(user_var.subcache) do
+								sub.insert(temp+i,v)
+							end
+						end
+						user_var.subcache={}
+					end
+				end
 			end
 		end
 		temp=temp+1
