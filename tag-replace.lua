@@ -3,16 +3,31 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.2"
+script_version = "1.2.1"
 
-local user_var={--自定义变量键值表
+local user_var--自定义变量键值表
+user_var={
 	subcache={},
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
 	begin,
 	temp_line,
 	bere_line,
 	keyfile="",
-	forcefps=nil
+	forcefps=nil,
+	--内置函数
+	deepCopy=function(add)
+		if add == nil then return nil end
+		local copy={}
+		for k,v in pairs(add) do
+			if type(v) == "table" then
+				copy[k] = user_var.deepCopy(v)
+			else
+				copy[k] = v
+			end
+		end
+		setmetatable(copy, user_var.deepCopy(getmetatable(add)))
+		return copy
+	end
 }
 
 local function cmp_class(temp_effct,bere_effct)
