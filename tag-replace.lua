@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.2.1"
+script_version = "1.2.2"
 
 local user_var--自定义变量键值表
 user_var={
@@ -335,10 +335,10 @@ local function do_macro(sub)
 									--开始处理所读内容
 									file:read("l")
 									local fps
-									if forcefps then
-										fps = file:read("l"):match("%d+%.%d+")
+									if user_var.forcefps then
+										fps = user_var.forcefps
 									else
-										fps = forcefps
+										fps = file:read("l"):match("%d+%.?%d*")
 									end
 									local time_start, step_num, time_end = key_line.start_time, 1
 									while line~=[[	Frame	X pixels	Y pixels	Z pixels]] do
