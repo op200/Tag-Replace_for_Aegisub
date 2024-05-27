@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.2.2"
+script_version = "1.3"
 
 local user_var--自定义变量键值表
 user_var={
@@ -13,6 +13,7 @@ user_var={
 	temp_line,
 	bere_line,
 	keyfile="",
+	keytext="",
 	forcefps=nil,
 	--内置函数
 	deepCopy=function(add)
@@ -294,6 +295,12 @@ local function do_macro(sub)
 				local bere = begin
 				--根据mode判断
 				if mode.keyframe then
+					if user_var.keytext~="" then
+						user_var.keyfile = os.getenv("TEMP") .. [[\tag-replace_keyfile.txt]]
+						local f = io.open(user_var.keyfile,'w')
+						f:write(user_var.keytext:gsub([[\N]],'\n'))
+						f:close()
+					end
 					local find_end = #sub
 					while bere<=find_end do--找到bere行
 						if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[temp].effect,sub[bere].effect) 
