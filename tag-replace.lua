@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.3"
+script_version = "1.4"
 
 local user_var--自定义变量键值表
 user_var={
@@ -15,6 +15,7 @@ user_var={
 	keyfile="",
 	keytext="",
 	forcefps=nil,
+	bere_text="",
 	--内置函数
 	deepCopy=function(add)
 		if add == nil then return nil end
@@ -95,10 +96,10 @@ end
 local function var_expansion(text, re_num, sub)--input文本和replace次数，通过re_num映射karaok变量至变量表
 	--扩展变量
 	while true do
-		local pos1, pos2 = text:find("%$%w+")
+		local pos1, pos2 = text:find("%$[%w_]+")
 		if not pos1 then break end
 		local var = text:sub(pos1+1,pos2)
-		if var~="" then
+		if var~="" then--扩展预留关键词
 			if var=="kdur" then
 				text = text:sub(1,pos1-1)..(user_var.kdur[re_num]-user_var.kdur[re_num-1])..text:sub(pos2+1)
 			elseif var=="start" then
@@ -108,7 +109,12 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 			elseif var=="mid" then
 				text = text:sub(1,pos1-1)..math.floor((user_var.kdur[re_num-1] + user_var.kdur[re_num]) * 5)..text:sub(pos2+1)
 			else
-				text = text:sub(1,pos1-1).."user_var."..var..text:sub(pos2+1)
+				--扩展用户变量(这里必须给text赋值，否则扩展表达式无变量使用)
+				if user_var[var]~=nil then
+					text = text:sub(1,pos1-1)..user_var[var]..text:sub(pos2+1)
+				else
+					text = text:sub(1,pos1-1).."user_var."..var..text:sub(pos2+1)
+				end
 			end
 		end
 	end
@@ -164,6 +170,8 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 			for i=1,#pos_table-1 do
 				local new_text = insert_line.text:sub(pos_table[i],pos_table[i+1]-1)
 				local pos1, pos2 = new_text:find(var_expansion(temp_tag,re_num,sub))
+				user_var.bere_text = new_text:sub(pos1,pos2)
+
 				new_text = new_text:sub(1,pos1-1) .. var_expansion(temp_re_tag,re_num,sub) .. new_text:sub(pos2+1)
 				table.insert(insert_table, new_text)
 				re_num = re_num+1
@@ -185,6 +193,8 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 			for i=1,#pos_table-1 do
 				local new_text = insert_line.text:sub(pos_table[i],pos_table[i+1]-1)
 				local pos1, pos2 = new_text:find(var_expansion(temp_tag,re_num,sub))
+				user_var.bere_text = new_text:sub(pos1,pos2)
+				
 				new_text = new_text:sub(1,pos1-1) .. var_expansion(temp_re_tag,re_num,sub) .. new_text:sub(pos2+1)
 				table.insert(insert_table, new_text)
 				re_num = re_num+1
@@ -200,6 +210,7 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 			if mode.findtext then
 				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
 				if not pos1 then break end
+				user_var.bere_text = insert_line.text:sub(pos1,pos2)
 
 				find_pos = pos2 + 1 - insert_line.text:len()--先减原长再加新长，防止出现正则表达式导致的字数不同问题
 				insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_add_tail,re_num,sub)..insert_line.text:sub(pos2+1)--插入temp_add_tail
@@ -209,6 +220,7 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 			else
 				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
 				if not pos1 then break end
+				user_var.bere_text = insert_line.text:sub(pos1,pos2)
 				--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
 				local pos3 = insert_line.text:find("}",pos2+1)--记录temp_tag后的}的位置
 
@@ -234,14 +246,14 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 				while i<=#insert_table do
 					insert_content.text = insert_table[i]
 					sub[0] = insert_content
-					i, append_num=i+1, append_num+1
+					i, append_num = i+1, append_num+1
 				end
 				return 0
 			else
 				while i<=#insert_table do
 					insert_content.text = insert_table[i]
 					sub.insert(pos+i-1,insert_content)
-					i, append_num=i+1, append_num+1
+					i, append_num = i+1, append_num+1
 				end
 				return i-2
 			end
