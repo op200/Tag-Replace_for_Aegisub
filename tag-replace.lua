@@ -3,7 +3,8 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.4"
+script_version = "1.4.1"
+-- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local user_var--自定义变量键值表
 user_var={
@@ -94,9 +95,35 @@ local function initialize(sub,begin)
 end
 
 local function var_expansion(text, re_num, sub)--input文本和replace次数，通过re_num映射karaok变量至变量表
+	--扩展表达式中的$部分
+	local pos1, pos2 = 1, 1
+	while true do
+		local pos3, pos4 = text:find("!.-!", pos2)
+		if not pos3 then break end
+		while true do
+			pos3, pos4 = text:find("%$[%w_]+")
+			if not pos3 then break end
+			local var = text:sub(pos3+1,pos4)
+			if var~="" then--扩展预留关键词
+				if var=="kdur" then
+					text = text:sub(1,pos3-1)..(user_var.kdur[re_num]-user_var.kdur[re_num-1])..text:sub(pos4+1)
+				elseif var=="start" then
+					text = text:sub(1,pos3-1)..(user_var.kdur[re_num-1]*10)..text:sub(pos4+1)
+				elseif var=="end" then
+					text = text:sub(1,pos3-1)..(user_var.kdur[re_num]*10)..text:sub(pos4+1)
+				elseif var=="mid" then
+					text = text:sub(1,pos3-1)..math.floor((user_var.kdur[re_num-1] + user_var.kdur[re_num]) * 5)..text:sub(pos4+1)
+				else
+					text = text:sub(1,pos3-1).."user_var."..var..text:sub(pos4+1)
+				end
+			end
+		end
+		pos1, pos2 = text:find("!.-!", pos2)
+		pos2 = pos2+1
+	end
 	--扩展变量
 	while true do
-		local pos1, pos2 = text:find("%$[%w_]+")
+		pos1, pos2 = text:find("%$[%w_]+")
 		if not pos1 then break end
 		local var = text:sub(pos1+1,pos2)
 		if var~="" then--扩展预留关键词
@@ -120,7 +147,7 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 	end
 	--扩展表达式
 	while true do
-		local pos1, pos2 = text:find("!.-!")
+		pos1, pos2 = text:find("!.-!")
 		if not pos1 then break end
 		local expression = text:sub(pos1+1,pos2-1)
 		local return_str = loadstring("return function(sub,user_var) "..expression.." end")()(sub,user_var)
@@ -262,10 +289,11 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 		if mode.append then
 			sub[0] = insert_content
 			append_num = append_num+1
+			return -1
 		else
 			sub.insert(pos,insert_content)
+			return 0
 		end
-		return 0
 	end
 
 	if sub[bere].effect:find("^beretag!") then--删除行
@@ -517,7 +545,7 @@ local function do_macro(sub)
 					end
 				else
 					while bere <= #sub - append_num do
-						user_var.temp_line, user_var.bere_line=temp, bere
+						user_var.temp_line, user_var.bere_line = temp, bere
 						bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
 					end
 				end
