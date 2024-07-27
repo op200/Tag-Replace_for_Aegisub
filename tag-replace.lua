@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.4.2"
+script_version = "1.5"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local user_var--自定义变量键值表
@@ -15,7 +15,7 @@ user_var={
 	bere_line,
 	keyfile="",
 	keytext="",
-	forcefps=nil,
+	forcefps=false,
 	bere_text="",
 	--内置函数
 	deepCopy=function(add)
@@ -100,24 +100,27 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 	while true do
 		local pos3, pos4 = text:find("!.-!", pos2)
 		if not pos3 then break end
+		local sub_str = text:sub(pos3+1,pos4-1)
 		while true do
-			pos3, pos4 = text:find("%$[%w_]+")
-			if not pos3 then break end
-			local var = text:sub(pos3+1,pos4)
+			local pos5, pos6 = sub_str:find("%$[%w_]+")
+			if not pos5 then break end
+			local var = sub_str:sub(pos5+1,pos6)
 			if var~="" then--扩展预留关键词
 				if var=="kdur" then
-					text = text:sub(1,pos3-1)..(user_var.kdur[re_num]-user_var.kdur[re_num-1])..text:sub(pos4+1)
+					sub_str = sub_str:sub(1,pos5-1)..(user_var.kdur[re_num]-user_var.kdur[re_num-1])..sub_str:sub(pos6+1)
 				elseif var=="start" then
-					text = text:sub(1,pos3-1)..(user_var.kdur[re_num-1]*10)..text:sub(pos4+1)
+					sub_str = sub_str:sub(1,pos5-1)..(user_var.kdur[re_num-1]*10)..sub_str:sub(pos6+1)
 				elseif var=="end" then
-					text = text:sub(1,pos3-1)..(user_var.kdur[re_num]*10)..text:sub(pos4+1)
+					sub_str = sub_str:sub(1,pos5-1)..(user_var.kdur[re_num]*10)..sub_str:sub(pos6+1)
 				elseif var=="mid" then
-					text = text:sub(1,pos3-1)..math.floor((user_var.kdur[re_num-1] + user_var.kdur[re_num]) * 5)..text:sub(pos4+1)
+					sub_str = sub_str:sub(1,pos5-1)..math.floor((user_var.kdur[re_num-1] + user_var.kdur[re_num]) * 5)..sub_str:sub(pos6+1)
 				else
-					text = text:sub(1,pos3-1).."user_var."..var..text:sub(pos4+1)
+					sub_str = sub_str:sub(1,pos5-1).."user_var."..var..sub_str:sub(pos6+1)
 				end
 			end
 		end
+		text = text:sub(1,pos3)..sub_str..text:sub(pos4)
+
 		pos1, pos2 = text:find("!.-!", pos2)
 		pos2 = pos2+1
 	end
@@ -438,10 +441,8 @@ local function do_macro(sub)
 									table.insert(out_value,{pos1,fz,key_rot,1})
 									table.insert(pos_table,pos1+3) table.insert(pos_table,pos2+1)
 									
-									local function cmp(a,b)
-										return a[1] < b[1]
-									end
-									table.sort(out_value,cmp) table.sort(pos_table)
+
+									table.sort(out_value, function(a,b) return a[1] < b[1] end) table.sort(pos_table)
 	
 									local insert_key_line_table, insert_key_line = {
 										key_line.text:sub(pos_table[1],pos_table[2]),
@@ -451,17 +452,32 @@ local function do_macro(sub)
 										key_line.text:sub(pos_table[9],pos_table[10]),
 										key_line.text:sub(pos_table[11],pos_table[12])
 									}
+									abcasd = 1
 									--根据mode插入
+									local function key_line_value(num,i)
+										-- out_value[num][3][i][out_value[num][4]] 文件中当前行值
+										-- out_value[num][3][1][out_value[num][4]] 文件中第一行值
+										-- out_value[num][2] 字幕中当前行值
+										if insert_key_line_table[num]:sub(-1)=='x' or insert_key_line_table[num]:sub(-1)=='y' then
+											return
+												insert_key_line_table[num] ..
+												math.floor((out_value[num][3][i][out_value[num][4]]/out_value[num][3][1][out_value[num][4]]*out_value[num][2])*100+0.5)/100
+										else
+											return
+												insert_key_line_table[num] ..
+												math.floor((out_value[num][3][i][out_value[num][4]]-out_value[num][3][1][out_value[num][4]]+out_value[num][2])*100+0.5)/100
+										end
+									end
 									time_end = time_start
 									if mode.append then
 										for i=1,#key_rot do
 											insert_key_line = key_line
 											insert_key_line.text =
-												insert_key_line_table[1] .. math.floor((out_value[1][3][i][out_value[1][4]]-out_value[1][3][1][out_value[1][4]]+out_value[1][2])*100+0.5)/100 ..
-												insert_key_line_table[2] .. math.floor((out_value[2][3][i][out_value[2][4]]-out_value[2][3][1][out_value[2][4]]+out_value[2][2])*100+0.5)/100 ..
-												insert_key_line_table[3] .. math.floor((out_value[3][3][i][out_value[3][4]]-out_value[3][3][1][out_value[3][4]]+out_value[3][2])*100+0.5)/100 ..
-												insert_key_line_table[4] .. math.floor((out_value[4][3][i][out_value[4][4]]-out_value[4][3][1][out_value[4][4]]+out_value[4][2])*100+0.5)/100 ..
-												insert_key_line_table[5] .. math.floor((out_value[5][3][i][out_value[5][4]]-out_value[5][3][1][out_value[5][4]]+out_value[5][2])*100+0.5)/100 ..
+												key_line_value(1,i) ..
+												key_line_value(2,i) ..
+												key_line_value(3,i) ..
+												key_line_value(4,i) ..
+												key_line_value(5,i) ..
 												insert_key_line_table[6]
 	
 											insert_key_line.start_time = time_end
@@ -476,11 +492,11 @@ local function do_macro(sub)
 										for i=1,#key_rot do
 											insert_key_line = key_line
 											insert_key_line.text =
-												insert_key_line_table[1] .. math.floor((out_value[1][3][i][out_value[1][4]]-out_value[1][3][1][out_value[1][4]]+out_value[1][2])*100+0.5)/100 ..
-												insert_key_line_table[2] .. math.floor((out_value[2][3][i][out_value[2][4]]-out_value[2][3][1][out_value[2][4]]+out_value[2][2])*100+0.5)/100 ..
-												insert_key_line_table[3] .. math.floor((out_value[3][3][i][out_value[3][4]]-out_value[3][3][1][out_value[3][4]]+out_value[3][2])*100+0.5)/100 ..
-												insert_key_line_table[4] .. math.floor((out_value[4][3][i][out_value[4][4]]-out_value[4][3][1][out_value[4][4]]+out_value[4][2])*100+0.5)/100 ..
-												insert_key_line_table[5] .. math.floor((out_value[5][3][i][out_value[5][4]]-out_value[5][3][1][out_value[5][4]]+out_value[5][2])*100+0.5)/100 ..
+												key_line_value(1,i) ..
+												key_line_value(2,i) ..
+												key_line_value(3,i) ..
+												key_line_value(4,i) ..
+												key_line_value(5,i) ..
 												insert_key_line_table[6]
 	
 											insert_key_line.start_time = time_end
