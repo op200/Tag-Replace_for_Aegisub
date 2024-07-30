@@ -3,7 +3,7 @@
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.5"
+script_version = "1.5.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local user_var--自定义变量键值表
@@ -366,7 +366,7 @@ local function do_macro(sub)
 										local pos = key_line.text:find("}")
 										key_line.text = key_line.text:sub(1,pos-1)..[[\fscy100]]..key_line.text:sub(pos)
 									end
-									if not sub[bere].text:find([[\frz%d]]) then
+									if not sub[bere].text:find([[\frz%-?%d]]) then
 										local pos = key_line.text:find("}")
 										key_line.text = key_line.text:sub(1,pos-1)..[[\frz0]]..key_line.text:sub(pos)
 									end
@@ -436,7 +436,7 @@ local function do_macro(sub)
 									table.insert(out_value,{pos1,fy,key_scale,2})
 									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2+1)
 	
-									pos1,pos2 = key_line.text:find([[\frz[%d%.]+]])
+									pos1,pos2 = key_line.text:find([[\frz%-?[%d%.]+]])
 									fz = key_line.text:sub(pos1+4,pos2)
 									table.insert(out_value,{pos1,fz,key_rot,1})
 									table.insert(pos_table,pos1+3) table.insert(pos_table,pos2+1)
