@@ -1,13 +1,18 @@
-﻿local gt=aegisub.gettext
+﻿local util = require("aegisub.util")
+require("karaskel")
+
+local gt=aegisub.gettext
 
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.5.1"
+script_version = "1.6"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
+
 
 local user_var--自定义变量键值表
 user_var={
+	sub,
 	subcache={},
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
 	begin,
@@ -30,6 +35,105 @@ user_var={
 		end
 		setmetatable(copy, user_var.deepCopy(getmetatable(add)))
 		return copy
+	end,
+	colorGradient = function(line_info, rgba, step_set, tags, control_points)
+		-- 计算组合数
+		math.comb = function(n, k)
+			if k > n then return 0 end
+			if k == 0 or k == n then return 1 end
+			k = math.min(k, n - k) -- 对称性
+			local c = 1
+			for i = 1, k do
+				c = c * (n - i + 1) / i
+			end
+			return c
+		end
+		-- 计算贝塞尔曲线插值
+		local function bezier_interpolate(t, control_points)
+			local n = #control_points - 1
+			local p = {0, 0, 0, 0}
+			for i = 0, n do
+				local binomial_coeff = math.comb(n, i)
+				local u = (1 - t) ^ (n - i)
+				local tt = t ^ i
+				for j = 1, 4 do
+					p[j] = p[j] + binomial_coeff * u * tt * control_points[i + 1][j]
+				end
+			end
+			return p
+		end
+
+
+		local meta, styles = karaskel.collect_head(user_var.sub)
+		local pos_line, line_num
+	
+		if type(line_info) == "table" then
+			x1, y1, x2, y2 = line_info[1], line_info[2], line_info[3], line_info[4]
+			line_num = line_info[5] or user_var.bere_line
+	
+			pos_line = user_var.sub[line_num]
+			karaskel.preproc_line_pos(meta, styles, pos_line)
+		else
+			line_num = line_info
+	
+			pos_line = user_var.sub[line_num]
+			karaskel.preproc_line_pos(meta, styles, pos_line)
+	
+			local expand = step_set[3] or 0
+			x1, y1, x2, y2 = pos_line.left - expand, pos_line.top - expand, pos_line.right + expand, pos_line.bottom + expand
+		end
+	
+		local pos_x, pos_y = pos_line.x, pos_line.y
+	
+		rgba1, rgba2, rgba3, rgba4 = rgba[1], rgba[2], rgba[3], rgba[4]
+		if type(rgba1) == "string" then rgba1 = {util.extract_color(rgba1)} end
+		if type(rgba2) == "string" then rgba2 = {util.extract_color(rgba2)} end
+		if type(rgba3) == "string" then rgba3 = {util.extract_color(rgba3)} end
+		if type(rgba4) == "string" then rgba4 = {util.extract_color(rgba4)} end
+	
+		-- 计算矩形的宽度和高度
+		local width = x2 - x1
+		local height = y2 - y1
+	
+		step_set = step_set or {nil, nil}
+		step_set[1] = step_set[1] or width + 1
+		step_set[2] = step_set[2] or height + 1
+	
+		tags = tags or {nil, nil}
+		color_tag = tags[1] or "c"
+		transparent_tag = tags[2] or "1a"
+	
+		control_points = control_points or {rgba1, rgba2, rgba3, rgba4, rgba1, rgba4}
+	
+		-- 遍历矩形中的每个点
+		for x = x1, x2, step_set[1] do
+			for y = y1, y2, step_set[2] do
+				-- 计算点(x, y)在矩形中的相对位置
+				local dx = (x - x1) / width
+				local dy = (y - y1) / height
+	
+				-- 使用贝塞尔曲线插值计算RGBA值
+				local rgba_top = bezier_interpolate(dx, {rgba1, control_points[1], control_points[2], rgba2})
+				local rgba_bottom = bezier_interpolate(dx, {rgba3, control_points[3], control_points[4], rgba4})
+				local rgba = bezier_interpolate(dy, {rgba_top, control_points[5], control_points[6], rgba_bottom})
+	
+				-- 确保 rgba 是四个有效的整数值
+				local r, g, b, a = math.floor(rgba[1] + 0.5), math.floor(rgba[2] + 0.5), math.floor(rgba[3] + 0.5), math.floor(rgba[4] + 0.5)
+				if r and g and b and a then
+					local subline = user_var.sub[line_num]
+					subline.text = string.format("{\\clip(%.2f,%.2f,%.2f,%.2f)\\%s%s\\%s%s\\pos(%s,%s)}%s",
+						x, y, x + step_set[1], y + step_set[2],
+						color_tag, util.ass_color(rgba[1], rgba[2], rgba[3]),
+						transparent_tag, util.ass_alpha(rgba[4]),
+						pos_x, pos_y,
+						subline.text)
+					table.insert(user_var.subcache, subline)
+				else
+					aegisub.dialog.display({{class = "label", label = "Error: rgba does not contain 4 valid elements" .. r .. g .. b .. a}})
+					exit()
+				end
+			end
+		end
 	end
 }
 
@@ -325,6 +429,7 @@ local function find_event(sub)
 end
 
 local function do_macro(sub)
+	user_var.sub=sub
 	local begin=find_event(sub)
 	local temp=begin
 	user_var.begin=begin
