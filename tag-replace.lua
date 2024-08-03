@@ -6,7 +6,7 @@ local gt=aegisub.gettext
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.6"
+script_version = "1.6.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -36,7 +36,7 @@ user_var={
 		setmetatable(copy, user_var.deepCopy(getmetatable(add)))
 		return copy
 	end,
-	colorGradient = function(line_info, rgba, step_set, tags, control_points)
+	colorGradient = function(line_info, rgba, step_set, tags, control_points, pos)
 		-- 计算组合数
 		math.comb = function(n, k)
 			if k > n then return 0 end
@@ -48,22 +48,31 @@ user_var={
 			end
 			return c
 		end
+	
 		-- 计算贝塞尔曲线插值
-		local function bezier_interpolate(t, control_points)
-			local n = #control_points - 1
-			local p = {0, 0, 0, 0}
+		local function bezier_interpolate(t, control_points_list)
+			local n = #control_points_list - 1
+			local interpolated_color = {0, 0, 0, 0}
 			for i = 0, n do
 				local binomial_coeff = math.comb(n, i)
 				local u = (1 - t) ^ (n - i)
 				local tt = t ^ i
 				for j = 1, 4 do
-					p[j] = p[j] + binomial_coeff * u * tt * control_points[i + 1][j]
+					interpolated_color[j] = interpolated_color[j] + binomial_coeff * u * tt * control_points_list[i + 1][j]
 				end
 			end
-			return p
+			return interpolated_color
 		end
-
-
+	
+		-- 计算双线性插值
+		local function bilinear_interpolate(x, y, color00, color01, color10, color11)
+			local r = color00[1] * (1 - x) * (1 - y) + color01[1] * x * (1 - y) + color10[1] * (1 - x) * y + color11[1] * x * y
+			local g = color00[2] * (1 - x) * (1 - y) + color01[2] * x * (1 - y) + color10[2] * (1 - x) * y + color11[2] * x * y
+			local b = color00[3] * (1 - x) * (1 - y) + color01[3] * x * (1 - y) + color10[3] * (1 - x) * y + color11[3] * x * y
+			local a = color00[4] * (1 - x) * (1 - y) + color01[4] * x * (1 - y) + color10[4] * (1 - x) * y + color11[4] * x * y
+			return {r, g, b, a}
+		end
+	
 		local meta, styles = karaskel.collect_head(user_var.sub)
 		local pos_line, line_num
 	
@@ -82,54 +91,79 @@ user_var={
 			local expand = step_set[3] or 0
 			x1, y1, x2, y2 = pos_line.left - expand, pos_line.top - expand, pos_line.right + expand, pos_line.bottom + expand
 		end
+		
+		pos = pos or {nil,nil}
+		local pos_x, pos_y = pos[1] or pos_line.x, pos[2] or pos_line.y
 	
-		local pos_x, pos_y = pos_line.x, pos_line.y
-	
-		rgba1, rgba2, rgba3, rgba4 = rgba[1], rgba[2], rgba[3], rgba[4]
-		if type(rgba1) == "string" then rgba1 = {util.extract_color(rgba1)} end
-		if type(rgba2) == "string" then rgba2 = {util.extract_color(rgba2)} end
-		if type(rgba3) == "string" then rgba3 = {util.extract_color(rgba3)} end
-		if type(rgba4) == "string" then rgba4 = {util.extract_color(rgba4)} end
+		local color1, color2, color3, color4 = rgba[1], rgba[2], rgba[3], rgba[4]
+		if type(color1) == "string" then color1 = {util.extract_color(color1)} end
+		if type(color2) == "string" then color2 = {util.extract_color(color2)} end
+		if type(color3) == "string" then color3 = {util.extract_color(color3)} end
+		if type(color4) == "string" then color4 = {util.extract_color(color4)} end
 	
 		-- 计算矩形的宽度和高度
-		local width = x2 - x1
-		local height = y2 - y1
+		local rect_width = x2 - x1
+		local rect_height = y2 - y1
 	
 		step_set = step_set or {nil, nil}
-		step_set[1] = step_set[1] or width + 1
-		step_set[2] = step_set[2] or height + 1
+		step_set[1] = step_set[1] or rect_width + 1
+		step_set[2] = step_set[2] or rect_height + 1
 	
 		tags = tags or {nil, nil}
 		color_tag = tags[1] or "c"
 		transparent_tag = tags[2] or "1a"
 	
-		control_points = control_points or {rgba1, rgba2, rgba3, rgba4, rgba1, rgba4}
+		control_points = control_points or {color1, color2, color3, color4}
+		for i = 1, #control_points do
+			if type(control_points[i]) == "string" then
+				control_points[i] = {util.extract_color(control_points[i])}
+			end
+		end
+	
+		-- 检测 control_points 的数量并选择插值方法
+		local use_bilinear = #control_points == 4
+		local use_bezier = #control_points >= 6
 	
 		-- 遍历矩形中的每个点
 		for x = x1, x2, step_set[1] do
 			for y = y1, y2, step_set[2] do
 				-- 计算点(x, y)在矩形中的相对位置
-				local dx = (x - x1) / width
-				local dy = (y - y1) / height
+				local dx = (x - x1) / rect_width
+				local dy = (y - y1) / rect_height
 	
-				-- 使用贝塞尔曲线插值计算RGBA值
-				local rgba_top = bezier_interpolate(dx, {rgba1, control_points[1], control_points[2], rgba2})
-				local rgba_bottom = bezier_interpolate(dx, {rgba3, control_points[3], control_points[4], rgba4})
-				local rgba = bezier_interpolate(dy, {rgba_top, control_points[5], control_points[6], rgba_bottom})
+				local interpolated_color
+				if use_bilinear then
+					-- 使用双线性插值计算RGBA值
+					local color00 = control_points[1]
+					local color01 = control_points[2]
+					local color10 = control_points[3]
+					local color11 = control_points[4]
+					interpolated_color = bilinear_interpolate(dx, dy, color00, color01, color10, color11)
+				elseif use_bezier then
+					-- 使用贝塞尔曲线插值计算RGBA值
+					local bezier_top = bezier_interpolate(dx, {color1, control_points[1], control_points[2], color2})
+					local bezier_bottom = bezier_interpolate(dx, {color3, control_points[3], control_points[4], color4})
+					interpolated_color = bezier_interpolate(dy, {bezier_top, control_points[5], control_points[6], bezier_bottom})
+				else
+					-- 默认情况下使用贝塞尔曲线插值
+					local bezier_top = bezier_interpolate(dx, {color1, control_points[1], control_points[2], color2})
+					local bezier_bottom = bezier_interpolate(dx, {color3, control_points[3], control_points[4], color4})
+					interpolated_color = bezier_interpolate(dy, {bezier_top, control_points[5], control_points[6], bezier_bottom})
+				end
 	
-				-- 确保 rgba 是四个有效的整数值
-				local r, g, b, a = math.floor(rgba[1] + 0.5), math.floor(rgba[2] + 0.5), math.floor(rgba[3] + 0.5), math.floor(rgba[4] + 0.5)
+				-- 确保 interpolated_color 是四个有效的整数值
+				local r, g, b, a = math.floor(interpolated_color[1] + 0.5), math.floor(interpolated_color[2] + 0.5), math.floor(interpolated_color[3] + 0.5), math.floor(interpolated_color[4] + 0.5)
 				if r and g and b and a then
 					local subline = user_var.sub[line_num]
 					subline.text = string.format("{\\clip(%.2f,%.2f,%.2f,%.2f)\\%s%s\\%s%s\\pos(%s,%s)}%s",
 						x, y, x + step_set[1], y + step_set[2],
-						color_tag, util.ass_color(rgba[1], rgba[2], rgba[3]),
-						transparent_tag, util.ass_alpha(rgba[4]),
+						color_tag, util.ass_color(interpolated_color[1], interpolated_color[2], interpolated_color[3]),
+						transparent_tag, util.ass_alpha(interpolated_color[4]),
 						pos_x, pos_y,
 						subline.text)
 					table.insert(user_var.subcache, subline)
 				else
-					aegisub.dialog.display({{class = "label", label = "Error: rgba does not contain 4 valid elements" .. r .. g .. b .. a}})
+					aegisub.dialog.display({{class = "label", label = "Error: interpolated_color does not contain 4 valid elements: " .. r .. ", " .. g .. ", " .. b .. ", " .. a}})
 					exit()
 				end
 			end
@@ -183,7 +217,17 @@ end
 
 local function initialize(sub,begin)
 	local findline=begin
+	local progress_refresh_time=0
 	while findline<=#sub do
+		if aegisub.progress.is_cancelled() then exit() end
+		if progress_refresh_time==9 then
+			progress_refresh_time=0
+			aegisub.progress.set(100*findline/#sub)
+			aegisub.progress.task(findline.." / "..#sub)
+		else
+			progress_refresh_time=progress_refresh_time+1
+		end
+
 		if sub[findline].effect:find("^beretag!") then--删除beretag!行
 			sub.delete(findline)
 		elseif sub[findline].effect:find("^:beretag@") then--还原:beretag@行
@@ -430,12 +474,22 @@ end
 
 local function do_macro(sub)
 	user_var.sub=sub
+	local progress_refresh_time=0
 	local begin=find_event(sub)
 	local temp=begin
 	user_var.begin=begin
 	initialize(sub,begin)--初始化，删除所有beretag!行，并还原:beretag@行
 	append_num=0--初始化append边界
 	while temp<=#sub do
+		if aegisub.progress.is_cancelled() then exit() end
+		if progress_refresh_time==9 then
+			progress_refresh_time=0
+			aegisub.progress.set(100*temp/#sub)
+			aegisub.progress.task(temp.." / "..#sub)
+		else
+			progress_refresh_time=progress_refresh_time+1
+		end
+
 		if sub[temp].comment then
 		--Find template lines. 检索模板行
 			if sub[temp].effect:find("^template@[%w;]-#[%w;]*$") then
