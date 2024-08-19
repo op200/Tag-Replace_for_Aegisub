@@ -6,7 +6,7 @@ local gt=aegisub.gettext
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.6.2"
+script_version = "1.7"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -18,8 +18,9 @@ user_var={
 	begin,
 	temp_line,
 	bere_line,
-	keyfile="",
+	-- keyfile="",
 	keytext="",
+	keyclip="",
 	forcefps=false,
 	bere_text="",
 	--内置函数
@@ -36,6 +37,9 @@ user_var={
 		setmetatable(copy, user_var.deepCopy(getmetatable(add)))
 		return copy
 	end,
+	-- timeGradient = function()
+
+	-- end,
 	colorGradient = function(line_info, rgba, step_set, tags, control_points, pos)
 		-- 计算组合数
 		math.comb = function(n, k)
@@ -498,24 +502,27 @@ local function do_macro(sub)
 				local bere = begin
 				--根据mode判断
 				if mode.keyframe then
-					if user_var.keytext~="" then
-						user_var.keyfile = os.getenv("TEMP") .. [[\tag-replace_keyfile.txt]]
-						local f = io.open(user_var.keyfile,'w')
-						f:write(user_var.keytext:gsub([[\N]],'\n'))
-						f:close()
+					local key_text_table = {}
+					if user_var.keytext~="" and user_var.keytext then
+						for line in user_var.keytext:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_text_table,line) end
 					end
 					local find_end = #sub
 					while bere<=find_end do--找到bere行
 						if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[temp].effect,sub[bere].effect) 
 							and (not mode.strictname or sub[temp].actor==sub[bere].actor) and (not mode.strictstyle or sub[temp].style==sub[bere].style) then
-							if sub[bere].text:find([[\pos%([^,]*,[^,]*%)]]) then--开始读取文件
-								--判断file是否可打开
-								local file = io.open(user_var.keyfile)--这个io.open是unicode-monkeypatch.lua里重载的
-								local line=file:read("l")
-								if not file then
-									aegisub.dialog.display({{class="label",label="keyframe file doesn't exist"}})
-								end
-								if line=="Adobe After Effects 6.0 Keyframe Data" then
+							if sub[bere].text:find([[\pos%([^,]-,[^,]-%)]]) then
+								-- if key_text_table=={} then
+								-- 	--判断file是否可读
+								-- 	local file = io.open(user_var.keyfile,'r')--这个io.open是unicode-monkeypatch.lua里重载的
+								-- 	-- local line=file:read("l")
+								-- 	if not file then
+								-- 		aegisub.dialog.display({{class="label",label="keyframe file doesn't exist"}})
+								-- 	end
+								-- 	for line in file:read("*a"):gmatch("[^\n]*") do table.insert(key_text_table,line) end
+								-- 	file:close()
+								-- end
+
+								if key_text_table[1]=="Adobe After Effects 6.0 Keyframe Data" then
 									--补全tag
 									local key_line = sub[bere]
 									if not sub[bere].text:find([[\fscx%d]]) then
@@ -530,6 +537,10 @@ local function do_macro(sub)
 										local pos = key_line.text:find("}")
 										key_line.text = key_line.text:sub(1,pos-1)..[[\frz0]]..key_line.text:sub(pos)
 									end
+									if not sub[bere].text:find([[\org%([^,]+,[^,]+%)]]) then
+										local pos = key_line.text:find("}")
+										key_line.text = key_line.text:sub(1,pos-1)..[[\org]]..key_line.text:match([[\pos(%([^%)]-%))]])..key_line.text:sub(pos)
+									end
 									key_line.effect = "beretag!"..key_line.effect:sub(9)
 									--处理bere行
 									if sub[bere].effect:find("^beretag@") then
@@ -542,41 +553,77 @@ local function do_macro(sub)
 										line.comment = true
 										sub[bere] = line
 									end
-									--开始处理所读内容
-									file:read("l")
+									--处理keytext内容
 									local fps
 									if user_var.forcefps then
 										fps = user_var.forcefps
 									else
-										fps = file:read("l"):match("%d+%.?%d*")
+										fps = key_text_table[2]:match("%d+%.?%d*")
 									end
 									local time_start, step_num, time_end = key_line.start_time, 1
-									while line~=[[	Frame	X pixels	Y pixels	Z pixels]] do
-										line=file:read("l")
+									local key_text_table_pos = 2
+									while key_text_table[key_text_table_pos]~=[[	Frame	X pixels	Y pixels	Z pixels]] do
+										key_text_table_pos=key_text_table_pos+1
 									end
+									key_text_table_pos=key_text_table_pos+1
+
 									local key_pos, key_scale, key_rot = {},{},{}
-									while true do--read Position
-										if not file:read("n") then break end
-										table.insert(key_pos,{file:read("n"),file:read("n")})
-										file:read("n")
+									while key_text_table[key_text_table_pos]~="Scale" do--read Position
+										table.insert(key_pos,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
+										key_text_table_pos=key_text_table_pos+1
 									end
-									file:read("l") file:read("l")
-									while true do--read Scale
-										if not file:read("n") then break end
-										table.insert(key_scale,{file:read("n"),file:read("n")})
-										file:read("n")
+									key_text_table_pos=key_text_table_pos+2
+									while key_text_table[key_text_table_pos]~="Rotation" do--read Scale
+										table.insert(key_scale,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
+										key_text_table_pos=key_text_table_pos+1
 									end
-									file:read("l") file:read("l")
-									while true do--read Rotation
-										if not file:read("n") then break end
-										table.insert(key_rot,{file:read("n")})
+									key_text_table_pos=key_text_table_pos+2
+									while key_text_table[key_text_table_pos]~="End of Keyframe Data" do--read Rotation
+										table.insert(key_rot,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)")})
+										key_text_table_pos=key_text_table_pos+1
 									end
-									file:close()
+									--处理keyclip内容
+									local key_clip_point_table = {}
+									if user_var.keyclip~="" and user_var.keyclip then
+										local key_clip_table = {}
+										for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table,line) end
+
+										if key_clip_table[1]=="shake_shape_data 4.0" then
+											local height = select(1,karaskel.collect_head(user_var.sub)).res_y
+											for _,line in ipairs(key_clip_table) do
+												if line:sub(1,11)=="vertex_data" then
+													line=line:sub(13)
+
+													--坐标转换
+													local coords = {}
+													for x, y in string.gmatch(line, "([^ ]-) ([^ ]-) ") do
+														table.insert(coords, {tonumber(x), tonumber(y)})
+													end
+													for i, coord in ipairs(coords) do
+														coord[2] = height - coord[2]
+													end
+													line=""
+													for _, coord in ipairs(coords) do
+														line = line..string.format("%.2f %.2f ", coord[1], coord[2])
+													end
+
+													local _,pos2=line:find("^[^ ]- [^ ]- ")
+													table.insert(key_clip_point_table,
+														[[{\clip(m ]]..line:sub(0,pos2).."l"..line:sub(pos2)..")}")
+												end
+											end
+										else
+											aegisub.dialog.display({{class="label",label=gt([["]]..key_clip_table[1]..[[" is not supported]])}})
+										end
+									end
+									for i=#key_clip_point_table+1,#key_rot do
+										key_clip_point_table[i]=""
+									end
 								--开始插入行
-									local x,y,fx,fy,fz
+									local x,y,fx,fy,fz,ox,oy
 									local pos_table, out_value = {1,#key_line.text}, {}
 									
-									local pos1,pos2 = key_line.text:find([[\pos%([^,]*,]])
+									local pos1,pos2 = key_line.text:find([[\pos%([^,]-,]])
 									x = key_line.text:sub(pos1+5,pos2-1)
 									table.insert(out_value,{pos1,x,key_pos,1})
 									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2)
@@ -601,6 +648,16 @@ local function do_macro(sub)
 									table.insert(out_value,{pos1,fz,key_rot,1})
 									table.insert(pos_table,pos1+3) table.insert(pos_table,pos2+1)
 									
+									pos1,pos2 = key_line.text:find([[\org%([^,]-,]])
+									ox = key_line.text:sub(pos1+5,pos2-1)
+									table.insert(out_value,{pos1,ox,key_pos,1})
+									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2)
+	
+									pos1,pos2 = key_line.text:find([[,[^,]-%)]],pos2)
+									oy = key_line.text:sub(pos1+1,pos2-1)
+									table.insert(out_value,{pos1,oy,key_pos,2})
+									table.insert(pos_table,pos1) table.insert(pos_table,pos2)
+									
 
 									table.sort(out_value, function(a,b) return a[1] < b[1] end) table.sort(pos_table)
 	
@@ -610,7 +667,9 @@ local function do_macro(sub)
 										key_line.text:sub(pos_table[5],pos_table[6]),
 										key_line.text:sub(pos_table[7],pos_table[8]),
 										key_line.text:sub(pos_table[9],pos_table[10]),
-										key_line.text:sub(pos_table[11],pos_table[12])
+										key_line.text:sub(pos_table[11],pos_table[12]),
+										key_line.text:sub(pos_table[13],pos_table[14]),
+										key_line.text:sub(pos_table[15],pos_table[16])
 									}
 									abcasd = 1
 									--根据mode插入
@@ -633,12 +692,15 @@ local function do_macro(sub)
 										for i=1,#key_rot do
 											insert_key_line = key_line
 											insert_key_line.text =
+												key_clip_point_table[i] ..
 												key_line_value(1,i) ..
 												key_line_value(2,i) ..
 												key_line_value(3,i) ..
 												key_line_value(4,i) ..
 												key_line_value(5,i) ..
-												insert_key_line_table[6]
+												key_line_value(6,i) ..
+												key_line_value(7,i) ..
+												insert_key_line_table[8]
 	
 											insert_key_line.start_time = time_end
 											time_end = time_start + math.floor(step_num*1000/fps+0.5)
@@ -652,12 +714,15 @@ local function do_macro(sub)
 										for i=1,#key_rot do
 											insert_key_line = key_line
 											insert_key_line.text =
+												key_clip_point_table[i] ..
 												key_line_value(1,i) ..
 												key_line_value(2,i) ..
 												key_line_value(3,i) ..
 												key_line_value(4,i) ..
 												key_line_value(5,i) ..
-												insert_key_line_table[6]
+												key_line_value(6,i) ..
+												key_line_value(7,i) ..
+												insert_key_line_table[8]
 	
 											insert_key_line.start_time = time_end
 											time_end = time_start + math.floor(step_num*1000/fps+0.5)
@@ -671,7 +736,7 @@ local function do_macro(sub)
 										bere = insert_pos - 1
 									end
 								else
-									aegisub.dialog.display({{class="label",label=gt([["]]..tostring(line)..[[" is not supported]])}})
+									aegisub.dialog.display({{class="label",label=gt([["]]..key_text_table[1]..[[" is not supported]])}})
 								end
 							else
 								aegisub.dialog.display({{class="label",label=gt[["\pos" not found]]}})
@@ -689,6 +754,8 @@ local function do_macro(sub)
 						bere = bere+1
 					end
 					bere = begin
+
+					user_var.keytext, user_var.keyclip = "", ""
 				end
 				if mode.strictstyle then
 					if mode.strictname then
