@@ -6,7 +6,7 @@ local gt=aegisub.gettext
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.7"
+script_version = "1.7.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -18,7 +18,6 @@ user_var={
 	begin,
 	temp_line,
 	bere_line,
-	-- keyfile="",
 	keytext="",
 	keyclip="",
 	forcefps=false,
@@ -37,9 +36,9 @@ user_var={
 		setmetatable(copy, user_var.deepCopy(getmetatable(add)))
 		return copy
 	end,
-	-- timeGradient = function()
-
-	-- end,
+	debug=function(text)
+		aegisub.dialog.display({{class="label",label=text}})
+	end,
 	colorGradient = function(line_info, rgba, step_set, tags, control_points, pos)
 		-- 计算组合数
 		math.comb = function(n, k)
@@ -206,7 +205,8 @@ local function get_mode(effect)--return table
 		strictname=false,
 		findtext=false,
 		append=false,
-		keyframe=false
+		keyframe=false,
+		uninsert=false
 	}
 	if modestring:len()==0 then
 		return mode
@@ -423,6 +423,8 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 
 --判断该行类型，第一次替换则注释该行，多次替换则删除该行
 	local function _do_insert(pos,insert_content)
+		if mode.uninsert then return 0 end
+
 		if mode.cuttag then
 			local i=1
 			if mode.append then
@@ -511,17 +513,6 @@ local function do_macro(sub)
 						if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[temp].effect,sub[bere].effect) 
 							and (not mode.strictname or sub[temp].actor==sub[bere].actor) and (not mode.strictstyle or sub[temp].style==sub[bere].style) then
 							if sub[bere].text:find([[\pos%([^,]-,[^,]-%)]]) then
-								-- if key_text_table=={} then
-								-- 	--判断file是否可读
-								-- 	local file = io.open(user_var.keyfile,'r')--这个io.open是unicode-monkeypatch.lua里重载的
-								-- 	-- local line=file:read("l")
-								-- 	if not file then
-								-- 		aegisub.dialog.display({{class="label",label="keyframe file doesn't exist"}})
-								-- 	end
-								-- 	for line in file:read("*a"):gmatch("[^\n]*") do table.insert(key_text_table,line) end
-								-- 	file:close()
-								-- end
-
 								if key_text_table[1]=="Adobe After Effects 6.0 Keyframe Data" then
 									--补全tag
 									local key_line = sub[bere]
@@ -836,6 +827,10 @@ local function do_macro(sub)
 end
 
 local function user_code(sub)--运行自定义预处理code行
+	user_var.subcache={}
+	user_var.keytext=""
+	user_var.keyclip=""
+	user_var.forcefps=false
 	for i=find_event(sub),#sub do
 		if sub[i].comment and sub[i].effect:find("^template#ppcode$") then
 			var_expansion(sub[i].text, 2, sub)
