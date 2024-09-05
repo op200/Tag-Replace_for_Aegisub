@@ -6,7 +6,7 @@ local gt=aegisub.gettext
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "1.7.1"
+script_version = "2.0"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -22,7 +22,10 @@ user_var={
 	keyclip="",
 	forcefps=false,
 	bere_text="",
+	cuttime_acceleration=1,
 	--内置函数
+	postProc=function(line)
+	end,
 	deepCopy=function(add)
 		if add == nil then return nil end
 		local copy={}
@@ -37,7 +40,7 @@ user_var={
 		return copy
 	end,
 	debug=function(text)
-		aegisub.dialog.display({{class="label",label=text}})
+		aegisub.dialog.display({{class="label",label=tostring(text):gsub("&", "&&")}})
 	end,
 	colorGradient = function(line_info, rgba, step_set, tags, control_points, pos)
 		-- 计算组合数
@@ -167,11 +170,15 @@ user_var={
 						subline.text)
 					table.insert(user_var.subcache, subline)
 				else
-					aegisub.dialog.display({{class = "label", label = "Error: interpolated_color does not contain 4 valid elements: " .. r .. ", " .. g .. ", " .. b .. ", " .. a}})
+					user_var.debug("Error: interpolated_color does not contain 4 valid elements: " .. r .. ", " .. g .. ", " .. b .. ", " .. a)
 					exit()
 				end
 			end
 		end
+	end,
+	cuttimeInterpolate=function(current_time, total_time, start_value, end_value)
+		local factor = (end_value - start_value) / ((total_time ^ user_var.cuttime_acceleration) - 1)
+		return start_value + factor * ((current_time ^ user_var.cuttime_acceleration) - 1)
 	end
 }
 
@@ -206,7 +213,8 @@ local function get_mode(effect)--return table
 		findtext=false,
 		append=false,
 		keyframe=false,
-		uninsert=false
+		uninsert=false,
+		cuttime=false
 	}
 	if modestring:len()==0 then
 		return mode
@@ -336,6 +344,7 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 	--根据mode判断替换方式
 	local temp_tag, temp_add_tail = sub[temp].text:match("^{(.-)}"), sub[temp].text:match("^{.-}(.*)")
 	local temp_re_tag, temp_add_text = temp_add_tail:match("^{(.-)}"), temp_add_tail:match("^{.-}(.*)")
+
 	local find_pos, re_num=1, 2 --re_num从2开始计数
 	if mode.cuttag then
 		--找到每个temp_tag的位置，将这些位置(除了第一个)前面的{的位置和结尾的位置写入pos_table，根据pos_table写入insert_table，最后替换insert_table的值
@@ -383,6 +392,120 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 				re_num = re_num+1
 			end
 		end
+	elseif mode.cuttime then
+		local fps = user_var.forcefps or 23.976
+		local total_time = math.ceil((insert_line.end_time - insert_line.start_time)*fps/1000)
+
+		local end_value_table = {}
+		for v in temp_re_tag:gmatch("[^\\]+") do
+			local pos=({v:find("^%d*%l+")})[2]
+			local head, value = v:sub(1,pos), v:sub(pos+1)
+			if value:find("^%(.*%)$") then
+				value=value:match("%((.*)%)")
+				local val={}
+				for i in value:gmatch("[^,]+") do
+					table.insert(val,i)
+				end
+				end_value_table[head]=val
+			else
+				end_value_table[head]={value}
+			end
+		end
+
+		local value_table = {}
+		for v in temp_tag:gmatch("[^\\]+") do
+			local pos=({v:find("^%d*%l+")})[2]
+			local head, value = v:sub(1,pos), v:sub(pos+1)
+			if value:find("^%(.*%)$") then
+				value=value:match("%((.*)%)")
+				local val={}
+				local i=1
+				for p in value:gmatch("[^,]+") do
+					table.insert(val,{p,end_value_table[head][i]})
+					i=i+1
+				end
+				table.insert(value_table, {head, val})
+			else
+				table.insert(value_table, {head, {{value, end_value_table[head][1]}}})
+			end
+		end
+
+		--判断并转换值类型
+		for i=1,#value_table do
+			for p=1,#value_table[i][2] do
+				if value_table[i][2][p][1]:find("^%d+$") then--十进制
+					value_table[i][3]=10
+				elseif value_table[i][2][p][1]:find("^&H%w+&?$") then--ASS颜色格式
+					value_table[i][3]="rgb"
+					local rgba={{util.extract_color(value_table[i][2][p][1])}, {util.extract_color(value_table[i][2][p][2])}}
+					if rgba[1][4]~=0 then value_table[i][3]="a" end
+					value_table[i][2][p]=rgba
+				elseif value_table[i][2][p][1]:find("^%w+$") then--十六进制
+					value_table[i][3]=16
+					value_table[i][2][p]={tonumber(value_table[i][2][p][1],16), tonumber(value_table[i][2][p][2],16)}
+				else
+					user_var.debug(gt"[cuttime] Unsupported format.")
+				end
+			end
+		end
+
+
+		local function _typeChange(value, v_type)
+			if v_type==10 then
+				return math.floor(value*1000+0.5)/1000
+			elseif v_type==16 then
+				return string.format("%X",value)
+			elseif v_type=="rgb" then
+				return util.ass_color(value[1],value[2],value[3])
+			elseif v_type=="a" then
+				util.ass_alpha(value[4])
+			end
+		end
+
+		local function _valueCalculation(current_time, total_time, value, pos)
+			if type(value[3])=="number" then
+				return user_var.cuttimeInterpolate(current_time, total_time, value[2][pos][1], value[2][pos][2])
+			else
+				return {user_var.cuttimeInterpolate(current_time, total_time, value[2][pos][1][1], value[2][pos][2][1]),
+						user_var.cuttimeInterpolate(current_time, total_time, value[2][pos][1][2], value[2][pos][2][2]),
+						user_var.cuttimeInterpolate(current_time, total_time, value[2][pos][1][3], value[2][pos][2][3]),
+						user_var.cuttimeInterpolate(current_time, total_time, value[2][pos][1][4], value[2][pos][2][4])}
+			end
+		end
+
+		local function _getTag(current_time,total_time,value_table,end_value_table)
+			local result=""
+
+			for i=1,#value_table do
+				if #value_table[i][2]==1 then
+					result = result.."\\"..value_table[i][1].._typeChange(_valueCalculation(current_time,total_time,value_table[i],1), value_table[i][3])
+				else
+					local str=""
+					for p=1,#value_table[i][2] do
+						str=str.._typeChange(_valueCalculation(current_time,total_time,value_table[i],p), value_table[i][3])..","
+					end
+					result = result.."\\"..value_table[i][1].."("..str:sub(1,-2)..")"
+				end
+			end
+
+			return "{"..result.."}"
+		end
+		
+		local start_time = insert_line.start_time
+		if start_time<=0 then start_time = -400/fps end
+		local now_time = start_time
+		for i=1,total_time do
+			local line = user_var.deepCopy(insert_line)
+			line.effect = "beretag!"..line.effect:sub(9)
+			line.start_time = now_time
+			now_time = start_time + i*1000/fps
+			if now_time>=insert_line.end_time then
+				now_time=insert_line.end_time
+			end
+			line.end_time = now_time
+			line.text = _getTag(i,total_time,value_table,end_value_table)..line.text
+			table.insert(insert_table,line)
+		end
 	else
 		--循环找到insert_line里所有的temp_tag
 		if temp_tag=="" then--考虑到{}的情况
@@ -425,18 +548,22 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 	local function _do_insert(pos,insert_content)
 		if mode.uninsert then return 0 end
 
-		if mode.cuttag then
+		local postProc = user_var.postProc
+
+		if mode.cuttime then
 			local i=1
 			if mode.append then
 				while i<=#insert_table do
-					insert_content.text = insert_table[i]
+					insert_content = insert_table[i]
+					postProc(insert_content)
 					sub[0] = insert_content
 					i, append_num = i+1, append_num+1
 				end
 				return 0
 			else
 				while i<=#insert_table do
-					insert_content.text = insert_table[i]
+					insert_content = insert_table[i]
+					postProc(insert_content)
 					sub.insert(pos+i-1,insert_content)
 					i, append_num = i+1, append_num+1
 				end
@@ -444,6 +571,28 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 			end
 		end
 
+		if mode.cuttag then
+			local i=1
+			if mode.append then
+				while i<=#insert_table do
+					insert_content.text = insert_table[i]
+					postProc(insert_content)
+					sub[0] = insert_content
+					i, append_num = i+1, append_num+1
+				end
+				return 0
+			else
+				while i<=#insert_table do
+					insert_content.text = insert_table[i]
+					postProc(insert_content)
+					sub.insert(pos+i-1,insert_content)
+					i, append_num = i+1, append_num+1
+				end
+				return i-2
+			end
+		end
+
+		postProc(insert_content)
 		if mode.append then
 			sub[0] = insert_content
 			append_num = append_num+1
@@ -461,14 +610,14 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 		return add_line_num
 	end
 --注释行，并在effect头部加上:
-		local tocmt=sub[bere]
-		tocmt.comment=true
-		tocmt.effect=":"..tocmt.effect
-		sub[bere]=tocmt
+	local tocmt=sub[bere]
+	tocmt.comment=true
+	tocmt.effect=":"..tocmt.effect
+	sub[bere]=tocmt
 --将@改为!
-		insert_line.effect="beretag!"..insert_line.effect:sub(9)
-		local add_line_num = _do_insert(bere+1,insert_line)
-		return add_line_num+1
+	insert_line.effect="beretag!"..insert_line.effect:sub(9)
+	local add_line_num = _do_insert(bere+1,insert_line)
+	return add_line_num+1
 end
 
 local function find_event(sub)
@@ -545,13 +694,9 @@ local function do_macro(sub)
 										sub[bere] = line
 									end
 									--处理keytext内容
-									local fps
-									if user_var.forcefps then
-										fps = user_var.forcefps
-									else
-										fps = key_text_table[2]:match("%d+%.?%d*")
-									end
+									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
 									local time_start, step_num, time_end = key_line.start_time, 1
+									if time_start<=0 then time_start = -400/fps end
 									local key_text_table_pos = 2
 									while key_text_table[key_text_table_pos]~=[[	Frame	X pixels	Y pixels	Z pixels]] do
 										key_text_table_pos=key_text_table_pos+1
@@ -604,7 +749,7 @@ local function do_macro(sub)
 												end
 											end
 										else
-											aegisub.dialog.display({{class="label",label=gt([["]]..key_clip_table[1]..[[" is not supported]])}})
+											user_var.debug(gt([["]]..key_clip_table[1]..[[" is not supported]]))
 										end
 									end
 									for i=#key_clip_point_table+1,#key_rot do
@@ -694,7 +839,7 @@ local function do_macro(sub)
 												insert_key_line_table[8]
 	
 											insert_key_line.start_time = time_end
-											time_end = time_start + math.floor(step_num*1000/fps+0.5)
+											time_end = time_start + step_num*1000/fps
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
 	
@@ -716,7 +861,7 @@ local function do_macro(sub)
 												insert_key_line_table[8]
 	
 											insert_key_line.start_time = time_end
-											time_end = time_start + math.floor(step_num*1000/fps+0.5)
+											time_end = time_start + step_num*1000/fps
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
 	
@@ -727,10 +872,10 @@ local function do_macro(sub)
 										bere = insert_pos - 1
 									end
 								else
-									aegisub.dialog.display({{class="label",label=gt([["]]..key_text_table[1]..[[" is not supported]])}})
+									user_var.debug(gt([["]]..key_text_table[1]..[[" is not supported]]))
 								end
 							else
-								aegisub.dialog.display({{class="label",label=gt[["\pos" not found]]}})
+								user_var.debug(gt[["\pos" not found]])
 							end
 						end
 						--next
