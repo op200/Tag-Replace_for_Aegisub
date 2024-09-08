@@ -433,7 +433,7 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 		--判断并转换值类型
 		for i=1,#value_table do
 			for p=1,#value_table[i][2] do
-				if value_table[i][2][p][1]:find("^%d+$") then--十进制
+				if value_table[i][2][p][1]:find("^[%d%.]+$") then--十进制
 					value_table[i][3]=10
 				elseif value_table[i][2][p][1]:find("^&H%w+&?$") then--ASS颜色格式
 					value_table[i][3]="rgb"
