@@ -6,7 +6,7 @@ local gt=aegisub.gettext
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "2.0"
+script_version = "2.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -39,10 +39,11 @@ user_var={
 		setmetatable(copy, user_var.deepCopy(getmetatable(add)))
 		return copy
 	end,
-	debug=function(text)
-		aegisub.dialog.display({{class="label",label=tostring(text):gsub("&", "&&")}})
+	debug=function(text, to_exit)
+		button = aegisub.dialog.display({{class="label",label=tostring(text):gsub("&", "&&")}})
+		if not button or to_exit then aegisub.cancel() end
 	end,
-	colorGradient = function(line_info, rgba, step_set, tags, control_points, pos)
+	colorGradient=function(line_info, rgba, step_set, tags, control_points, pos)
 		-- 计算组合数
 		math.comb = function(n, k)
 			if k > n then return 0 end
@@ -54,7 +55,7 @@ user_var={
 			end
 			return c
 		end
-	
+
 		-- 计算贝塞尔曲线插值
 		local function bezier_interpolate(t, control_points_list)
 			local n = #control_points_list - 1
@@ -69,7 +70,7 @@ user_var={
 			end
 			return interpolated_color
 		end
-	
+
 		-- 计算双线性插值
 		local function bilinear_interpolate(x, y, color00, color01, color10, color11)
 			local r = color00[1] * (1 - x) * (1 - y) + color01[1] * x * (1 - y) + color10[1] * (1 - x) * y + color11[1] * x * y
@@ -78,7 +79,7 @@ user_var={
 			local a = color00[4] * (1 - x) * (1 - y) + color01[4] * x * (1 - y) + color10[4] * (1 - x) * y + color11[4] * x * y
 			return {r, g, b, a}
 		end
-	
+
 		local meta, styles = karaskel.collect_head(user_var.sub)
 		local pos_line, line_num
 	
@@ -90,7 +91,7 @@ user_var={
 			karaskel.preproc_line_pos(meta, styles, pos_line)
 		else
 			line_num = line_info
-	
+
 			pos_line = user_var.sub[line_num]
 			karaskel.preproc_line_pos(meta, styles, pos_line)
 	
@@ -98,46 +99,46 @@ user_var={
 			if type(expand)=="number" then expand={expand,expand,expand,expand} end
 			x1, y1, x2, y2 = pos_line.left - expand[1], pos_line.top - expand[2], pos_line.right + expand[3], pos_line.bottom + expand[4]
 		end
-		
+
 		pos = pos or {nil,nil}
 		local pos_x, pos_y = pos[1] or pos_line.x, pos[2] or pos_line.y
-	
+
 		local color1, color2, color3, color4 = rgba[1], rgba[2], rgba[3], rgba[4]
 		if type(color1) == "string" then color1 = {util.extract_color(color1)} end
 		if type(color2) == "string" then color2 = {util.extract_color(color2)} end
 		if type(color3) == "string" then color3 = {util.extract_color(color3)} end
 		if type(color4) == "string" then color4 = {util.extract_color(color4)} end
-	
+
 		-- 计算矩形的宽度和高度
 		local rect_width = x2 - x1
 		local rect_height = y2 - y1
-	
+
 		step_set = step_set or {nil, nil}
 		step_set[1] = step_set[1] or rect_width + 1
 		step_set[2] = step_set[2] or rect_height + 1
-	
+
 		tags = tags or {nil, nil}
 		color_tag = tags[1] or "c"
 		transparent_tag = tags[2] or "1a"
-	
+
 		control_points = control_points or {color1, color2, color3, color4}
 		for i = 1, #control_points do
 			if type(control_points[i]) == "string" then
 				control_points[i] = {util.extract_color(control_points[i])}
 			end
 		end
-	
+
 		-- 检测 control_points 的数量并选择插值方法
 		local use_bilinear = #control_points == 4
 		local use_bezier = #control_points >= 6
-	
+
 		-- 遍历矩形中的每个点
 		for x = x1, x2, step_set[1] do
 			for y = y1, y2, step_set[2] do
 				-- 计算点(x, y)在矩形中的相对位置
 				local dx = (x - x1) / rect_width
 				local dy = (y - y1) / rect_height
-	
+
 				local interpolated_color
 				if use_bilinear then
 					-- 使用双线性插值计算RGBA值
@@ -157,7 +158,7 @@ user_var={
 					local bezier_bottom = bezier_interpolate(dx, {color3, control_points[3], control_points[4], color4})
 					interpolated_color = bezier_interpolate(dy, {bezier_top, control_points[5], control_points[6], bezier_bottom})
 				end
-	
+
 				-- 确保 interpolated_color 是四个有效的整数值
 				local r, g, b, a = math.floor(interpolated_color[1] + 0.5), math.floor(interpolated_color[2] + 0.5), math.floor(interpolated_color[3] + 0.5), math.floor(interpolated_color[4] + 0.5)
 				if r and g and b and a then
@@ -170,8 +171,7 @@ user_var={
 						subline.text)
 					table.insert(user_var.subcache, subline)
 				else
-					user_var.debug("Error: interpolated_color does not contain 4 valid elements: " .. r .. ", " .. g .. ", " .. b .. ", " .. a)
-					exit()
+					user_var.debug("Error: interpolated_color does not contain 4 valid elements: " .. r .. ", " .. g .. ", " .. b .. ", " .. a, true)
 				end
 			end
 		end
@@ -179,8 +179,44 @@ user_var={
 	cuttimeInterpolate=function(current_time, total_time, start_value, end_value)
 		local factor = (end_value - start_value) / ((total_time ^ user_var.cuttime_acceleration) - 1)
 		return start_value + factor * ((current_time ^ user_var.cuttime_acceleration) - 1)
+	end,
+	classmixProcess=function(first, second)
+		if not (first and second) then return first or second end
+		local new = first
+		new.text = new.text..second.text
+		return new
 	end
 }
+local org_user_var = user_var.deepCopy(user_var)
+
+local function initialize(sub,begin)
+	user_var = org_user_var.deepCopy(org_user_var)
+
+	local findline=begin
+	local progress_refresh_time=0
+	while findline<=#sub do
+		if aegisub.progress.is_cancelled() then aegisub.cancel() end
+		if progress_refresh_time==9 then
+			progress_refresh_time=0
+			aegisub.progress.set(100*findline/#sub)
+			aegisub.progress.task(findline.." / "..#sub)
+		else
+			progress_refresh_time=progress_refresh_time+1
+		end
+
+		if sub[findline].effect:find("^beretag!") then--删除beretag!行
+			sub.delete(findline)
+		elseif sub[findline].effect:find("^:beretag@") then--还原:beretag@行
+			local new_line=sub[findline]
+			new_line.comment=false
+			new_line.effect=new_line.effect:sub(2)
+			sub[findline]=new_line
+			findline=findline+1
+		else
+			findline=findline+1
+		end
+	end
+end
 
 local function cmp_class(temp_effct,bere_effct)
 	local temp_class={}
@@ -214,7 +250,8 @@ local function get_mode(effect)--return table
 		append=false,
 		keyframe=false,
 		uninsert=false,
-		cuttime=false
+		cuttime=false,
+		classmix=false
 	}
 	if modestring:len()==0 then
 		return mode
@@ -226,33 +263,6 @@ local function get_mode(effect)--return table
 		end
 	end
 	return mode
-end
-
-local function initialize(sub,begin)
-	local findline=begin
-	local progress_refresh_time=0
-	while findline<=#sub do
-		if aegisub.progress.is_cancelled() then exit() end
-		if progress_refresh_time==9 then
-			progress_refresh_time=0
-			aegisub.progress.set(100*findline/#sub)
-			aegisub.progress.task(findline.." / "..#sub)
-		else
-			progress_refresh_time=progress_refresh_time+1
-		end
-
-		if sub[findline].effect:find("^beretag!") then--删除beretag!行
-			sub.delete(findline)
-		elseif sub[findline].effect:find("^:beretag@") then--还原:beretag@行
-			local new_line=sub[findline]
-			new_line.comment=false
-			new_line.effect=new_line.effect:sub(2)
-			sub[findline]=new_line
-			findline=findline+1
-		else
-			findline=findline+1
-		end
-	end
 end
 
 local function var_expansion(text, re_num, sub)--input文本和replace次数，通过re_num映射karaok变量至变量表
@@ -323,11 +333,10 @@ end
 
 local append_num
 
-local function do_replace(sub, temp, bere, mode, begin)--return int
+local function do_replace(sub, bere, mode, begin)--return int
 	if sub[bere].comment or not sub[bere].effect:find("^beretag") then return 0 end--若该行被注释或为非beretag行，则跳过
---判断该行class是否与模板行class有交集
-	if not cmp_class(sub[temp].effect,sub[bere].effect) then return 0 end
---准备replace
+	if not cmp_class(sub[user_var.temp_line].effect,sub[bere].effect) then return 0 end--判断该行class是否与模板行class有交集
+	--准备replace
 	local insert_line, insert_table=sub[bere], {}
 	local find_pos, kdur_num=1, 2
 	while true do--写入kdur表
@@ -340,9 +349,9 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 		end
 		find_pos, kdur_num = pos2+1, kdur_num+1
 	end
---执行replace
+	--执行replace
 	--根据mode判断替换方式
-	local temp_tag, temp_add_tail = sub[temp].text:match("^{(.-)}"), sub[temp].text:match("^{.-}(.*)")
+	local temp_tag, temp_add_tail = sub[user_var.temp_line].text:match("^{(.-)}"), sub[user_var.temp_line].text:match("^{.-}(.*)")
 	local temp_re_tag, temp_add_text = temp_add_tail:match("^{(.-)}"), temp_add_tail:match("^{.-}(.*)")
 
 	local find_pos, re_num=1, 2 --re_num从2开始计数
@@ -544,7 +553,7 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 		end
 	end
 
---判断该行类型，第一次替换则注释该行，多次替换则删除该行
+	--判断该行类型，第一次替换则注释该行，多次替换则删除该行
 	local function _do_insert(pos,insert_content)
 		if mode.uninsert then return 0 end
 
@@ -607,14 +616,17 @@ local function do_replace(sub, temp, bere, mode, begin)--return int
 		--这里插入和删除的顺序不能更改，否则会导致逆天bug
 		local add_line_num = _do_insert(bere+1,insert_line)
 		sub.delete(bere)
+		if bere < user_var.temp_line then
+			user_var.temp_line=user_var.temp_line-1
+		end
 		return add_line_num
 	end
---注释行，并在effect头部加上:
+	--注释行，并在effect头部加上:
 	local tocmt=sub[bere]
 	tocmt.comment=true
 	tocmt.effect=":"..tocmt.effect
 	sub[bere]=tocmt
---将@改为!
+	--将@改为!
 	insert_line.effect="beretag!"..insert_line.effect:sub(9)
 	local add_line_num = _do_insert(bere+1,insert_line)
 	return add_line_num+1
@@ -629,27 +641,27 @@ local function find_event(sub)
 end
 
 local function do_macro(sub)
-	user_var.sub=sub
 	local progress_refresh_time=0
 	local begin=find_event(sub)
-	local temp=begin
-	user_var.begin=begin
 	initialize(sub,begin)--初始化，删除所有beretag!行，并还原:beretag@行
+	user_var.temp_line=begin
+	user_var.sub=sub
+	user_var.begin=begin
 	append_num=0--初始化append边界
-	while temp<=#sub do
-		if aegisub.progress.is_cancelled() then exit() end
+	while user_var.temp_line<=#sub do
+		if aegisub.progress.is_cancelled() then aegisub.cancel() end
 		if progress_refresh_time==9 then
 			progress_refresh_time=0
-			aegisub.progress.set(100*temp/#sub)
-			aegisub.progress.task(temp.." / "..#sub)
+			aegisub.progress.set(100*user_var.temp_line/#sub)
+			aegisub.progress.task(user_var.temp_line.." / "..#sub)
 		else
 			progress_refresh_time=progress_refresh_time+1
 		end
 
-		if sub[temp].comment then
+		if sub[user_var.temp_line].comment then
 		--Find template lines. 检索模板行
-			if sub[temp].effect:find("^template@[%w;]-#[%w;]*$") then
-				local mode = get_mode(sub[temp].effect)
+			if sub[user_var.temp_line].effect:find("^template@[%w;]-#[%w;]*$") then
+				local mode = get_mode(sub[user_var.temp_line].effect)
 				local bere = begin
 				--根据mode判断
 				if mode.keyframe then
@@ -659,8 +671,8 @@ local function do_macro(sub)
 					end
 					local find_end = #sub
 					while bere<=find_end do--找到bere行
-						if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[temp].effect,sub[bere].effect) 
-							and (not mode.strictname or sub[temp].actor==sub[bere].actor) and (not mode.strictstyle or sub[temp].style==sub[bere].style) then
+						if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect) 
+							and (not mode.strictname or sub[user_var.temp_line].actor==sub[bere].actor) and (not mode.strictstyle or sub[user_var.temp_line].style==sub[bere].style) then
 							if sub[bere].text:find([[\pos%([^,]-,[^,]-%)]]) then
 								if key_text_table[1]=="Adobe After Effects 6.0 Keyframe Data" then
 									--补全tag
@@ -893,42 +905,172 @@ local function do_macro(sub)
 
 					user_var.keytext, user_var.keyclip = "", ""
 				end
-				if mode.strictstyle then
-					if mode.strictname then
+				if mode.classmix then
+					local first_table,second_table = {},{}
+					local to_comment
+					if mode.strictstyle then
+						if mode.strictname then
+							for bere = begin, #sub - append_num do
+								local temp_line,bere_line = sub[user_var.temp_line],sub[bere]
+								if temp_line.style == bere_line.style and temp_line.actor == bere_line.actor and cmp_class(temp_line.effect,bere_line.effect) then
+									to_comment = false
+									local first_class, second_class = temp_line.text:match("^{(.-)}"), temp_line.text:match("^{.-}{(.-)}")
+									if cmp_class('@'..first_class..'#',bere_line.effect) then
+										table.insert(first_table, user_var.deepCopy(bere_line))
+										to_comment = true
+									end
+									if cmp_class('@'..second_class..'#',bere_line.effect) then
+										table.insert(second_table, user_var.deepCopy(bere_line))
+										to_comment = true
+									end
+									if to_comment then
+										if bere_line.effect:find("^beretag@") then
+											bere_line.effect = ':'..bere_line.effect
+										end
+										bere_line.comment = true
+										sub[bere] = bere_line
+									end
+								end
+							end
+						else
+							for bere = begin, #sub - append_num do
+								local temp_line,bere_line = sub[user_var.temp_line],sub[bere]
+								if sub[user_var.temp_line].style == sub[bere].style and cmp_class(temp_line.effect,bere_line.effect) then
+									to_comment = false
+									local first_class, second_class = temp_line.text:match("^{(.-)}"), temp_line.text:match("^{.-}{(.-)}")
+									if cmp_class('@'..first_class..'#',bere_line.effect) then
+										table.insert(first_table, user_var.deepCopy(bere_line))
+										to_comment = true
+									end
+									if cmp_class('@'..second_class..'#',bere_line.effect) then
+										table.insert(second_table, user_var.deepCopy(bere_line))
+										to_comment = true
+									end
+									if to_comment then
+										if bere_line.effect:find("^beretag@") then
+											bere_line.effect = ':'..bere_line.effect
+										end
+										bere_line.comment = true
+										sub[bere] = bere_line
+									end
+								end
+							end
+						end
+					elseif mode.strictname then
+						for bere = begin, #sub - append_num do
+							local temp_line,bere_line = sub[user_var.temp_line],sub[bere]
+							if sub[user_var.temp_line].actor == sub[bere].actor and cmp_class(temp_line.effect,bere_line.effect) then
+								to_comment = false
+								local first_class, second_class = temp_line.text:match("^{(.-)}"), temp_line.text:match("^{.-}{(.-)}")
+								if cmp_class('@'..first_class..'#',bere_line.effect) then
+									table.insert(first_table, user_var.deepCopy(bere_line))
+									to_comment = true
+								end
+								if cmp_class('@'..second_class..'#',bere_line.effect) then
+									table.insert(second, user_var.deepCopy(bere_line))
+									to_comment = true
+								end
+								if to_comment then
+									if bere_line.effect:find("^beretag@") then
+										bere_line.effect = ':'..bere_line.effect
+									end
+									bere_line.comment = true
+									sub[bere] = bere_line
+								end
+							end
+						end
+					else
+						for bere = begin, #sub - append_num do
+							local temp_line,bere_line = sub[user_var.temp_line],sub[bere]
+							if cmp_class(temp_line.effect,bere_line.effect) then
+								to_comment = false
+								local first_class, second_class = temp_line.text:match("^{(.-)}"), temp_line.text:match("^{.-}{(.-)}")
+								if cmp_class('@'..first_class..'#',bere_line.effect) then
+									table.insert(first_table, user_var.deepCopy(bere_line))
+									to_comment = true
+								end
+								if cmp_class('@'..second_class..'#',bere_line.effect) then
+									table.insert(second_table, user_var.deepCopy(bere_line))
+									to_comment = true
+								end
+								if to_comment then
+									if bere_line.effect:find("^beretag@") then
+										bere_line.effect = ':'..bere_line.effect
+									end
+									bere_line.comment = true
+									sub[bere] = bere_line
+								end
+							end
+						end
+					end
+
+					--合并
+					local mix_table = {}
+					for i = 1,math.max(#first_table,#second_table) do
+						local new = user_var.classmixProcess(first_table[i],second_table[i])
+						new.effect = "beretag!"..new.effect:sub(9)
+						table.insert(mix_table, new)
+					end
+
+					--插入
+					if mode.append then
+						for i,v in ipairs(mix_table) do
+							sub[0]=v
+						end
+					else
+						for i,v in ipairs(mix_table) do
+							sub.insert(user_var.temp_line+i,v)
+						end
+					end
+
+					--删除多余行
+					local i=begin
+					while i<=#sub do
+						local new=sub[i]
+						if new.comment and new.effect:find("^beretag!") then
+							sub.delete(i)
+						else
+							i=i+1
+						end
+					end
+				else
+					if mode.strictstyle then
+						if mode.strictname then
+							while bere <= #sub - append_num do
+								if sub[user_var.temp_line].style == sub[bere].style and sub[user_var.temp_line].actor == sub[bere].actor then
+									user_var.bere_line = bere
+									bere = bere + 1 + do_replace(sub, bere, mode, begin)
+								else
+									bere = bere + 1
+								end
+							end
+						else
+							while bere <= #sub - append_num do
+								if sub[user_var.temp_line].style == sub[bere].style then
+									user_var.bere_line = bere
+									bere = bere + 1 + do_replace(sub, bere, mode, begin)
+								else
+									bere = bere + 1
+								end
+							end
+						end
+					elseif mode.strictname then
 						while bere <= #sub - append_num do
-							if sub[temp].style == sub[bere].style and sub[temp].actor == sub[bere].actor then
-								user_var.temp_line, user_var.bere_line=temp, bere
-								bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
+							if sub[user_var.temp_line].actor == sub[bere].actor then
+								user_var.bere_line = bere
+								bere = bere + 1 + do_replace(sub, bere, mode, begin)
 							else
 								bere = bere + 1
 							end
 						end
 					else
 						while bere <= #sub - append_num do
-							if sub[temp].style == sub[bere].style then
-								user_var.temp_line, user_var.bere_line=temp, bere
-								bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
-							else
-								bere = bere + 1
-							end
+							user_var.bere_line = bere
+							bere = bere + 1 + do_replace(sub, bere, mode, begin)
 						end
-					end
-				elseif mode.strictname then
-					while bere <= #sub - append_num do
-						if sub[temp].actor == sub[bere].actor then
-							user_var.temp_line, user_var.bere_line=temp, bere
-							bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
-						else
-							bere = bere + 1
-						end
-					end
-				else
-					while bere <= #sub - append_num do
-						user_var.temp_line, user_var.bere_line = temp, bere
-						bere = bere + 1 + do_replace(sub, temp, bere, mode, begin)
 					end
 				end
-				if #user_var.subcache > 0 and mode.recache then--插入缓存行
+				if mode.recache and #user_var.subcache > 0 then--插入缓存行
 					for i=1,#user_var.subcache do
 						user_var.subcache[i].effect = "beretag!"..user_var.subcache[i].effect:sub(9)
 					end
@@ -938,17 +1080,17 @@ local function do_macro(sub)
 						end
 					else
 						for i,v in ipairs(user_var.subcache) do
-							sub.insert(temp+i,v)
+							sub.insert(user_var.temp_line+i,v)
 						end
 					end
 					user_var.subcache={}
 				end
 			end
 		--检索命令行
-			if sub[temp].effect:find("^template#code") then
-				var_expansion(sub[temp].text, 2, sub)
+			if sub[user_var.temp_line].effect:find("^template#code") then
+				var_expansion(sub[user_var.temp_line].text, 2, sub)
 				if #user_var.subcache > 0 then--插入缓存行
-					mode = get_mode(sub[temp].effect)
+					mode = get_mode(sub[user_var.temp_line].effect)
 					if mode.recache then
 						for i=1,#user_var.subcache do
 							user_var.subcache[i].effect = "beretag!"..user_var.subcache[i].effect:sub(9)
@@ -959,7 +1101,7 @@ local function do_macro(sub)
 							end
 						else
 							for i,v in ipairs(user_var.subcache) do
-								sub.insert(temp+i,v)
+								sub.insert(user_var.temp_line+i,v)
 							end
 						end
 						user_var.subcache={}
@@ -967,7 +1109,7 @@ local function do_macro(sub)
 				end
 			end
 		end
-		temp=temp+1
+		user_var.temp_line=user_var.temp_line+1
 	end
 end
 
