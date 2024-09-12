@@ -6,7 +6,7 @@ local gt=aegisub.gettext
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "2.1"
+script_version = "2.1.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -185,6 +185,16 @@ user_var={
 		local new = first
 		new.text = new.text..second.text
 		return new
+	end,
+	pyCode=function(cmd, popen)
+		if popen then
+			local handle = io.popen([[python -c "]]..cmd..'"')
+			local output = handle:read("*a")
+			handle:close()
+			return output
+		else
+			return os.execute([[python -c "]]..cmd..'"')
+		end
 	end
 }
 local org_user_var = user_var.deepCopy(user_var)
@@ -1166,10 +1176,6 @@ local function macro_processing_function_initialize(subtitles)--初始化
 	initialize(subtitles,find_event(subtitles))
 end
 
-local function macro_validation_function()--判断是否可执行
-	return true
-end
-
-aegisub.register_macro(gt"Tag Replace Apply", gt"Replace all strings with your settings", macro_processing_function, macro_validation_function)
-aegisub.register_macro(gt"Tag Replace Apply in selected lines", gt"Replace selected lines' strings with your settings", macro_processing_function_selected, macro_validation_function)
+aegisub.register_macro(gt"Tag Replace Apply", gt"Replace all strings with your settings", macro_processing_function)
+aegisub.register_macro(gt"Tag Replace Apply in selected lines", gt"Replace selected lines' strings with your settings", macro_processing_function_selected)
 aegisub.register_macro(gt"Tag Replace Initialize", gt"Only do the initialize function", macro_processing_function_initialize)
