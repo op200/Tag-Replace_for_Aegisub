@@ -6,7 +6,7 @@ local gt=aegisub.gettext
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "2.1.1"
+script_version = "2.1.2"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -565,7 +565,10 @@ local function do_replace(sub, bere, mode, begin)--return int
 
 	--判断该行类型，第一次替换则注释该行，多次替换则删除该行
 	local function _do_insert(pos,insert_content)
-		if mode.uninsert then return 0 end
+		if mode.uninsert then 
+			if sub[bere].effect:find("^beretag!") then return 0 end
+			return -1
+		end
 
 		local postProc = user_var.postProc
 
