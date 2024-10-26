@@ -6,7 +6,7 @@ local gt=aegisub.gettext
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "2.1.2"
+script_version = "2.1.3"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -94,7 +94,7 @@ user_var={
 
 			pos_line = user_var.sub[line_num]
 			karaskel.preproc_line_pos(meta, styles, pos_line)
-	
+
 			local expand = step_set[3] or 0
 			if type(expand)=="number" then expand={expand,expand,expand,expand} end
 			x1, y1, x2, y2 = pos_line.left - expand[1], pos_line.top - expand[2], pos_line.right + expand[3], pos_line.bottom + expand[4]
@@ -102,6 +102,7 @@ user_var={
 
 		pos = pos or {nil,nil}
 		local pos_x, pos_y = pos[1] or pos_line.x, pos[2] or pos_line.y
+		x1, y1, x2, y2 = x1+pos_x-pos_line.x, y1+pos_y-pos_line.y, x2+pos_x-pos_line.x, y2+pos_y-pos_line.y
 
 		local color1, color2, color3, color4 = rgba[1], rgba[2], rgba[3], rgba[4]
 		if type(color1) == "string" then color1 = {util.extract_color(color1)} end
