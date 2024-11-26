@@ -1127,7 +1127,7 @@ local function do_macro(sub)
 					--合并
 					local mix_table = {}
 					for i = 1,math.max(#first_table,#second_table) do
-						local new = user_var.classmixProcess(first_table[i],second_table[i])
+						local new = user_var.classmixProc(first_table[i],second_table[i])
 						new.effect = "beretag!"..new.effect:sub(9)
 						table.insert(mix_table, new)
 					end
