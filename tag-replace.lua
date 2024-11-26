@@ -6,7 +6,7 @@ local gt=aegisub.gettext
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "2.1.4"
+script_version = "2.2"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -29,9 +29,7 @@ user_var={
 			return start_value + factor * ((current_time ^ user_var.cuttime.accel) - 1)
 		end
 	},
-	--内置函数
-	postProc=function(line)
-	end,
+	--功能性
 	deepCopy=function(add)
 		if add == nil then return nil end
 		local copy={}
@@ -46,9 +44,19 @@ user_var={
 		return copy
 	end,
 	debug=function(text, to_exit)
-		button = aegisub.dialog.display({{class="label",label=tostring(text):gsub("&", "&&")}})
+		local button = aegisub.dialog.display({{class="label",label=tostring(text):gsub("&", "&&")}})
 		if not button or to_exit then aegisub.cancel() end
 	end,
+	--后处理
+	postProc=function(line)
+	end,
+	classmixProc=function(first, second)
+		if not (first and second) then return first or second end
+		local new = first
+		new.text = new.text..second.text
+		return new
+	end,
+	--处理
 	colorGradient=function(line_info, rgba, step_set, tags, control_points, pos)
 		-- 计算组合数
 		math.comb = function(n, k)
@@ -183,21 +191,47 @@ user_var={
 			end
 		end
 	end,
-	classmixProcess=function(first, second)
-		if not (first and second) then return first or second end
-		local new = first
-		new.text = new.text..second.text
-		return new
+	getTagCut=function(text)
+		local result = {}
+		local text_pos = 1
+		local pos_1, pos_2, last_pos_2 = 1, 1, 0
+		local text_num, tag_num = 1, 1
+
+		while true do
+			pos_1, pos_2 = text:find("{.-}", pos_2)
+			if not pos_1 then break end
+
+			local t = text:sub(text_pos, pos_1-1)
+			if t~="" then
+				table.insert(result, {t, false, text_num})
+				text_num = text_num+1
+			end
+			table.insert(result, {text:sub(pos_1, pos_2), true, tag_num})
+			tag_num = tag_num+1
+
+			text_pos = pos_2+1
+			last_pos_2 = pos_2
+		end
+		local t = text:sub(last_pos_2+1, -1)
+		if t~="" then
+			table.insert(result, {t, false, text_num})
+		end
+
+		return result
 	end,
-	pyCode=function(cmd, popen)
+	--外部
+	cmdCode=function(cmd, popen)
 		if popen then
-			local handle = io.popen([[python -c "]]..cmd..'"')
+			local handle = io.popen(cmd)
 			local output = handle:read("*a")
 			handle:close()
 			return output
 		else
-			return os.execute([[python -c "]]..cmd..'"')
+			return os.execute(cmd)
 		end
+	end,
+	pyCode=function(cmd, popen)
+		return user_var.cmdCode([[python -c "]]..cmd..'"', popen)
 	end
 }
 local org_user_var = user_var.deepCopy(user_var)
@@ -258,13 +292,14 @@ local function get_mode(effect)--return table
 		recache=false,
 		cuttag=false,
 		strictstyle=false,
-		strictname=false,
+		strictactor=false,
 		findtext=false,
 		append=false,
 		keyframe=false,
 		uninsert=false,
 		cuttime=false,
-		classmix=false
+		classmix=false,
+		onlyfind=false
 	}
 	if modestring:len()==0 then
 		return mode
@@ -688,7 +723,7 @@ local function do_macro(sub)
 					local find_end = #sub
 					while bere<=find_end do--找到bere行
 						if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect) 
-							and (not mode.strictname or sub[user_var.temp_line].actor==sub[bere].actor) and (not mode.strictstyle or sub[user_var.temp_line].style==sub[bere].style) then
+							and (not mode.strictactor or sub[user_var.temp_line].actor==sub[bere].actor) and (not mode.strictstyle or sub[user_var.temp_line].style==sub[bere].style) then
 
 							if (user_var.keytext=="" or not user_var.keytext) and user_var.keyclip~="" and user_var.keyclip then--只有clip的情况
 								--处理keyclip内容
@@ -990,12 +1025,11 @@ local function do_macro(sub)
 					bere = begin
 
 					user_var.keytext, user_var.keyclip = "", ""
-				end
-				if mode.classmix then
+				elseif mode.classmix then
 					local first_table,second_table = {},{}
 					local to_comment
 					if mode.strictstyle then
-						if mode.strictname then
+						if mode.strictactor then
 							for bere = begin, #sub - append_num do
 								local temp_line,bere_line = sub[user_var.temp_line],sub[bere]
 								if temp_line.style == bere_line.style and temp_line.actor == bere_line.actor and cmp_class(temp_line.effect,bere_line.effect) then
@@ -1042,7 +1076,7 @@ local function do_macro(sub)
 								end
 							end
 						end
-					elseif mode.strictname then
+					elseif mode.strictactor then
 						for bere = begin, #sub - append_num do
 							local temp_line,bere_line = sub[user_var.temp_line],sub[bere]
 							if sub[user_var.temp_line].actor == sub[bere].actor and cmp_class(temp_line.effect,bere_line.effect) then
@@ -1119,9 +1153,56 @@ local function do_macro(sub)
 							i=i+1
 						end
 					end
+				elseif mode.onlyfind then
+					if mode.strictstyle then
+						if mode.strictactor then
+							while bere <= #sub - append_num do
+								if sub[user_var.temp_line].style == sub[bere].style and sub[user_var.temp_line].actor == sub[bere].actor
+								   and not sub[bere].comment and sub[bere].effect:find("^beretag")
+								   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect)
+								then
+									user_var.bere_line = bere
+									var_expansion(sub[user_var.temp_line].text, 2, sub)
+								end
+								bere = bere + 1
+							end
+						else
+							while bere <= #sub - append_num do
+								if sub[user_var.temp_line].style == sub[bere].style
+								   and not sub[bere].comment and sub[bere].effect:find("^beretag")
+								   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect)
+								then
+									user_var.bere_line = bere
+									var_expansion(sub[user_var.temp_line].text, 2, sub)
+								end
+								bere = bere + 1
+							end
+						end
+					elseif mode.strictactor then
+						while bere <= #sub - append_num do
+							if sub[user_var.temp_line].actor == sub[bere].actor
+							   and not sub[bere].comment and sub[bere].effect:find("^beretag")
+							   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect)
+							then
+								user_var.bere_line = bere
+								var_expansion(sub[user_var.temp_line].text, 2, sub)
+							end
+							bere = bere + 1
+						end
+					else
+						while bere <= #sub - append_num do
+							if not sub[bere].comment and sub[bere].effect:find("^beretag")
+							   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect)
+							then
+								user_var.bere_line = bere
+								var_expansion(sub[user_var.temp_line].text, 2, sub)
+							end
+							bere = bere + 1
+						end
+					end
 				else
 					if mode.strictstyle then
-						if mode.strictname then
+						if mode.strictactor then
 							while bere <= #sub - append_num do
 								if sub[user_var.temp_line].style == sub[bere].style and sub[user_var.temp_line].actor == sub[bere].actor then
 									user_var.bere_line = bere
@@ -1140,7 +1221,7 @@ local function do_macro(sub)
 								end
 							end
 						end
-					elseif mode.strictname then
+					elseif mode.strictactor then
 						while bere <= #sub - append_num do
 							if sub[user_var.temp_line].actor == sub[bere].actor then
 								user_var.bere_line = bere
