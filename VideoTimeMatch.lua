@@ -3,7 +3,7 @@
 script_name = gt"Video Time Match"
 script_description = gt"According to frame difference from two videos to match time. (Aegisub must load this video, the FPS of both videos must be the same and must be CFR)"
 script_author = "op200"
-script_version = "0.1"
+script_version = "0.2"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function debug(text, to_exit)
@@ -24,7 +24,7 @@ local time_table = {}
 local function get_time_table()
 	local button, input = aegisub.dialog.display({
 		{name='entry', height=4, width=5, class='textbox', hint=gt"Enter manually here"},
-		{name='select', y=4, width=5, class='dropdown', items={gt"Manual entry", gt"Auto run VideoMatch"}, value="Auto run VideoMatch", hint=gt"If manual entry, use the textbox's content, else then run VideoMatch.exe"},
+		{name='select', y=4, width=5, class='dropdown', items={gt"Manual entry", gt"Auto run VideoMatch"}, value=gt"Manual entry", hint=gt"If manual entry, use the textbox's content, else then run VideoMatch.exe"},
 		{name='video1', y=5, width=5, class='edit', hint=gt"Enter video path 1 here"},
 		{name='video2', y=6, width=5, class='edit', hint=gt"Enter video path 2 here"},
 		{name='option', y=7, width=5, class='edit', text="-scale 4", hint=gt"Enter additional options here"}
@@ -43,7 +43,9 @@ local function get_time_table()
 	for line in frame_result:gmatch("[^\n]+") do
 		local a,b = line:match("(%d+)%->([%d-]+)")
 		if not a then break end
-		time_table[tonumber(a)] = tonumber(b)
+		a, b = tonumber(a), tonumber(b)
+		if b==-1 then b = a end
+		time_table[a] = b
 	end
 end
 
@@ -52,13 +54,21 @@ local function match_time(sub)
 
 	for i = begin,#sub do
 		local line = sub[i]
+		line.start_time, line.end_time = aegisub.ms_from_frame(aegisub.frame_from_ms(line.start_time)), aegisub.ms_from_frame(aegisub.frame_from_ms(line.end_time))
+		sub[i] = line
+	end
+
+	for i = begin,#sub do
+		local line = sub[i]
 
 		local frame_1, frame_2 = aegisub.frame_from_ms(line.start_time), aegisub.frame_from_ms(line.end_time)
-		frame_1, frame_2 = time_table[frame_1], time_table[frame_2]
-		local start_time, end_time = aegisub.ms_from_frame(frame_1), aegisub.ms_from_frame(frame_2)
-		line.start_time, line.end_time = start_time or line.start_time, end_time or line.end_time
+		local frame_1_new, frame_2_new = time_table[frame_1] or frame_1, time_table[frame_2] or frame_2
 
-		line.actor = line.actor.."[VTM]"
+		if frame_1~=frame_1_new or frame_2~=frame_2_new then
+			line.actor = line.actor.."[VTM]"
+		end
+
+		line.start_time, line.end_time = aegisub.ms_from_frame(frame_1_new), aegisub.ms_from_frame(frame_2_new)
 
 		sub[i] = line
 	end
