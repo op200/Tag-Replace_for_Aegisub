@@ -3,7 +3,7 @@
 script_name = gt"Video Time Match"
 script_description = gt"According to frame difference from two videos to match time. (Aegisub must load this video, the FPS of both videos must be the same and must be CFR)"
 script_author = "op200"
-script_version = "0.2"
+script_version = "0.3"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function debug(text, to_exit)
@@ -77,10 +77,10 @@ local function match_time(sub)
 
 	for i = begin,#sub do
 		local line = sub[i]
-
-		line.actor = line.actor:sub(1, -6)
-
-		sub[i] = line
+		if line.actor:sub(-5)=="[VTM]" then
+			line.actor = line.actor:sub(1, -6)
+			sub[i] = line
+		end
 	end
 
 	aegisub.set_undo_point("Clear [VTM]")
