@@ -6,7 +6,7 @@ local gt=aegisub.gettext
 script_name = gt"Tag Replace"
 script_description = gt"Replace string such as tag"
 script_author = "op200"
-script_version = "2.2"
+script_version = "2.2.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -625,7 +625,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 					insert_content = insert_table[i]
 					postProc(insert_content)
 					sub.insert(pos+i-1,insert_content)
-					i, append_num = i+1, append_num+1
+					i = i+1
 				end
 				return i-2
 			end
@@ -646,7 +646,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 					insert_content.text = insert_table[i]
 					postProc(insert_content)
 					sub.insert(pos+i-1,insert_content)
-					i, append_num = i+1, append_num+1
+					i = i+1
 				end
 				return i-2
 			end
@@ -667,7 +667,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 		--这里插入和删除的顺序不能更改，否则会导致逆天bug
 		local add_line_num = _do_insert(bere+1,insert_line)
 		sub.delete(bere)
-		if bere < user_var.temp_line then
+		if mode.append and bere < user_var.temp_line then
 			user_var.temp_line=user_var.temp_line-1
 		end
 		return add_line_num
@@ -1275,6 +1275,7 @@ local function do_macro(sub)
 					end
 				end
 			end
+			append_num=0--还原append边界
 		end
 		user_var.temp_line=user_var.temp_line+1
 	end
