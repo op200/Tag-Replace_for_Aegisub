@@ -1,12 +1,12 @@
 ﻿local util = require("aegisub.util")
 require("karaskel")
 
-local gt=aegisub.gettext
+local tr=aegisub.gettext
 
-script_name = gt"Tag Replace"
-script_description = gt"Replace string such as tag"
+script_name = tr"Tag Replace"
+script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.3"
+script_version = "2.4"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -243,16 +243,10 @@ local function initialize(sub,begin)
 	user_var = org_user_var.deepCopy(org_user_var)
 
 	local findline=begin
-	local progress_refresh_time=0
+	aegisub.progress.title(tr"Tag Replace - Initializing")
 	while findline<=#sub do
 		if aegisub.progress.is_cancelled() then aegisub.cancel() end
-		if progress_refresh_time==9 then
-			progress_refresh_time=0
-			aegisub.progress.set(100*findline/#sub)
-			aegisub.progress.task(findline.." / "..#sub)
-		else
-			progress_refresh_time=progress_refresh_time+1
-		end
+		aegisub.progress.set(100*findline/#sub)
 
 		if sub[findline].effect:find("^beretag!") then--删除beretag!行
 			sub.delete(findline)
@@ -382,8 +376,12 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 	while true do
 		pos1, pos2 = text:find("!.-!")
 		if not pos1 then break end
-		local expression = text:sub(pos1+1,pos2-1)
-		local return_str = loadstring("return function(sub,user_var) "..expression.." end")()(sub,user_var)
+		local load_fun, err = load("return function(sub,user_var) "..text:sub(pos1+1,pos2-1).." end")
+		if not load_fun then
+			user_var.debug(tr"[var_expansion] Error in template line "..(user_var.temp_line-user_var.begin+1)..": "..err)
+			aegisub.cancel()
+		end
+		local return_str = load_fun()(sub,user_var)
 		if not return_str then return_str="" end
 		text = text:sub(1,pos1-1)..return_str..text:sub(pos2+1)
 	end
@@ -511,7 +509,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 					value_table[i][3]=16
 					value_table[i][2][p]={tonumber(value_table[i][2][p][1],16), tonumber(value_table[i][2][p][2],16)}
 				else
-					user_var.debug(gt"[cuttime] Unsupported format: "..value_table[i][2][p][1])
+					user_var.debug(tr"[cuttime] Unsupported format: "..value_table[i][2][p][1])
 				end
 			end
 		end
@@ -723,15 +721,16 @@ local function do_macro(sub)
 	user_var.sub=sub
 	user_var.begin=begin
 	append_num=0--初始化append边界
+	aegisub.progress.title(tr"Tag Replace - Replace")
+	local progress_total = 0
+	for i = begin, #sub do
+		if sub[i].effect:find("^template") and sub[i].comment then
+			progress_total = progress_total + 1
+		end
+	end
 	while user_var.temp_line<=#sub do
 		if aegisub.progress.is_cancelled() then aegisub.cancel() end
-		if progress_refresh_time==9 then
-			progress_refresh_time=0
-			aegisub.progress.set(100*user_var.temp_line/#sub)
-			aegisub.progress.task(user_var.temp_line.." / "..#sub)
-		else
-			progress_refresh_time=progress_refresh_time+1
-		end
+		aegisub.progress.set(100*user_var.temp_line/progress_total)
 
 		--Find template lines. 检索模板行
 		if sub[user_var.temp_line].comment then
@@ -957,7 +956,7 @@ local function do_macro(sub)
 											end
 										end
 									else
-										user_var.debug(gt([["]]..key_clip_table[1]..[[" is not supported]]))
+										user_var.debug([["]]..key_clip_table[1]..[[" is not supported]])
 									end
 	
 									local time_start, step_num, time_end = key_line.start_time, 1
@@ -1082,7 +1081,7 @@ local function do_macro(sub)
 														end
 													end
 												else
-													user_var.debug(gt([["]]..key_clip_table[1]..[[" is not supported]]))
+													user_var.debug([["]]..key_clip_table[1]..[[" is not supported]])
 												end
 											end
 											for i=#key_clip_point_table+1,#key_rot do
@@ -1205,10 +1204,10 @@ local function do_macro(sub)
 												bere = insert_pos - 1
 											end
 										else
-											user_var.debug(gt([["]]..key_text_table[1]..[[" is not supported]]))
+											user_var.debug([["]]..key_text_table[1]..[[" is not supported]])
 										end
 									else
-										user_var.debug(gt[["\pos" not found]])
+										user_var.debug(tr[["\pos" not found]])
 									end
 								end
 							end
@@ -1281,7 +1280,7 @@ local function do_macro(sub)
 				end
 			end
 		--检索命令行
-			if sub[user_var.temp_line].effect:find("^template#code") then
+			if sub[user_var.temp_line].effect:find("^template#") then
 				var_expansion(sub[user_var.temp_line].text, 2, sub)
 				if #user_var.subcache > 0 then--插入缓存行
 					mode = get_mode(sub[user_var.temp_line].effect)
@@ -1306,22 +1305,19 @@ local function do_macro(sub)
 		end
 		user_var.temp_line=user_var.temp_line+1
 	end
-end
 
-local function user_code(sub)--运行自定义预处理code行
-	user_var.subcache={}
-	user_var.keytext=""
-	user_var.keyclip=""
-	user_var.forcefps=false
-	for i=find_event(sub),#sub do
-		if sub[i].comment and sub[i].effect:find("^template#ppcode$") then
-			var_expansion(sub[i].text, 2, sub)
+	--删除所有空的 beretag! 行
+	local i=begin
+	while i <= #sub do
+		if sub[i].effect:find("^beretag!") and not sub[i].comment and sub[i].text=="" then
+			sub.delete(i)
+		else
+			i = i+1
 		end
 	end
 end
 
 local function macro_processing_function(subtitles)--Execute Macro. 执行宏
-	user_code(subtitles)
 	do_macro(subtitles)
 end
 
@@ -1352,7 +1348,6 @@ local function macro_processing_function_selected(subtitles,selected_lines)--Exe
 		selected_table[tostring(v)]=true
 	end
 	comment_template_line(subtitles,selected_table)
-	user_code(subtitles)
 	do_macro(subtitles)
 	uncomment_template_line(subtitles)
 end
@@ -1361,6 +1356,19 @@ local function macro_processing_function_initialize(subtitles)--初始化
 	initialize(subtitles,find_event(subtitles))
 end
 
-aegisub.register_macro(gt"Tag Replace Apply", gt"Replace all strings with your settings", macro_processing_function)
-aegisub.register_macro(gt"Tag Replace Apply in selected lines", gt"Replace selected lines' strings with your settings", macro_processing_function_selected)
-aegisub.register_macro(gt"Tag Replace Initialize", gt"Only do the initialize function", macro_processing_function_initialize)
+aegisub.register_macro(tr"Tag Replace Apply", tr"Replace all strings with your settings", macro_processing_function)
+aegisub.register_macro(tr"Tag Replace Apply in selected lines", tr"Replace selected lines' strings with your settings", macro_processing_function_selected)
+aegisub.register_macro(tr"Tag Replace Initialize", tr"Only do the initialize function", macro_processing_function_initialize)
+
+local function filter_processing_function(subtitles, old_settings)
+	do_macro(subtitles)
+	for i = find_event(subtitles), #subtitles do
+		if subtitles[i].effect:find("^beretag!") and not subtitles[i].comment then
+			local line = subtitles[i]
+			line.effect = "beretag!"
+			subtitles[i] = line
+		end
+	end
+end
+
+aegisub.register_filter(tr"Tag Replace", tr"Replace and clear sth", 2500, filter_processing_function)
