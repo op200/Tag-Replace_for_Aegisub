@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.4"
+script_version = "2.4.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -391,8 +391,8 @@ end
 local append_num
 
 local function do_replace(sub, bere, mode, begin)--return int
-	if sub[bere].comment or not sub[bere].effect:find("^beretag") then return 0 end--若该行被注释或为非beretag行，则跳过
-	if not cmp_class(sub[user_var.temp_line].effect,sub[bere].effect) then return 0 end--判断该行class是否与模板行class有交集
+	if sub[bere].comment or not sub[bere].effect:find("^beretag") then return 1 end--若该行被注释或为非beretag行，则跳过
+	if not cmp_class(sub[user_var.temp_line].effect,sub[bere].effect) then return 1 end--判断该行class是否与模板行class有交集
 	--准备replace
 	local insert_line, insert_table=sub[bere], {}
 	local find_pos, kdur_num=1, 2
@@ -625,9 +625,8 @@ local function do_replace(sub, bere, mode, begin)--return int
 
 	--判断该行类型，第一次替换则注释该行，多次替换则删除该行
 	local function _do_insert(pos,insert_content)
-		if mode.uninsert then 
-			if sub[bere].effect:find("^beretag!") then return 0 end
-			return -1
+		if mode.uninsert then
+			return 0 --下文调用该函数时虽然return不同，但这里都返回0
 		end
 
 		local postProc = user_var.postProc
@@ -641,7 +640,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 					sub[0] = insert_content
 					i, append_num = i+1, append_num+1
 				end
-				return 0
+				return 1
 			else
 				while i<=#insert_table do
 					insert_content = insert_table[i]
@@ -649,7 +648,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 					sub.insert(pos+i-1,insert_content)
 					i = i+1
 				end
-				return i-2
+				return i-1
 			end
 		end
 
@@ -662,7 +661,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 					sub[0] = insert_content
 					i, append_num = i+1, append_num+1
 				end
-				return 0
+				return 1
 			else
 				while i<=#insert_table do
 					insert_content.text = insert_table[i]
@@ -670,7 +669,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 					sub.insert(pos+i-1,insert_content)
 					i = i+1
 				end
-				return i-2
+				return i-1
 			end
 		end
 
@@ -678,10 +677,10 @@ local function do_replace(sub, bere, mode, begin)--return int
 		if mode.append then
 			sub[0] = insert_content
 			append_num = append_num+1
-			return -1
+			return 0
 		else
 			sub.insert(pos,insert_content)
-			return 0
+			return 1
 		end
 	end
 
@@ -734,7 +733,7 @@ local function do_macro(sub)
 
 		--Find template lines. 检索模板行
 		if sub[user_var.temp_line].comment then
-			if sub[user_var.temp_line].effect:find("^template@[%w;]-#[%w;]*$") then
+			if sub[user_var.temp_line].effect:find("^template@[^#]-#.*$") then
 				local mode = get_mode(sub[user_var.temp_line].effect)
 				local bere = begin
 				--根据mode判断
@@ -1232,7 +1231,7 @@ local function do_macro(sub)
 							while bere <= #sub - append_num do
 								if sub[user_var.temp_line].style == sub[bere].style and sub[user_var.temp_line].actor == sub[bere].actor then
 									user_var.bere_line = bere
-									bere = bere + 1 + do_replace(sub, bere, mode, begin)
+									bere = bere + do_replace(sub, bere, mode, begin)
 								else
 									bere = bere + 1
 								end
@@ -1241,7 +1240,7 @@ local function do_macro(sub)
 							while bere <= #sub - append_num do
 								if sub[user_var.temp_line].style == sub[bere].style then
 									user_var.bere_line = bere
-									bere = bere + 1 + do_replace(sub, bere, mode, begin)
+									bere = bere + do_replace(sub, bere, mode, begin)
 								else
 									bere = bere + 1
 								end
@@ -1251,7 +1250,7 @@ local function do_macro(sub)
 						while bere <= #sub - append_num do
 							if sub[user_var.temp_line].actor == sub[bere].actor then
 								user_var.bere_line = bere
-								bere = bere + 1 + do_replace(sub, bere, mode, begin)
+								bere = bere + do_replace(sub, bere, mode, begin)
 							else
 								bere = bere + 1
 							end
@@ -1259,7 +1258,7 @@ local function do_macro(sub)
 					else
 						while bere <= #sub - append_num do
 							user_var.bere_line = bere
-							bere = bere + 1 + do_replace(sub, bere, mode, begin)
+							bere = bere + do_replace(sub, bere, mode, begin)
 						end
 					end
 				end
