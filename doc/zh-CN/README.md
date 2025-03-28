@@ -54,7 +54,7 @@ classmix:
     合并两种类的行
 ```
 
-例如可以通过 `findtext` 模式和正则表达式，把 `中文|英文` 的行分割成双语字幕，并附带漏译检测
+例如可以通过 `findtext` 模式和正则表达式，把 `中文|英文` 的行分割成双语字幕，并附带漏译检测($debug 函数中的形参就是检测到漏译后输出的文本)
 ```
 Comment: 0,0:00:00.00,0:00:00.00,zh,,0,1240,0,template@dialog#onlyfind,!local line=sub[$bere_line] if not line.text:find("|") then $debug("") end table.insert($subcache,$deepCopy(line)) if line.style=="zh" then line.style="en" else if line.style=="zh-top" then line.style="en-top" else $debug("dialog error: "..line.text) end end line.layer=1 table.insert($subcache,line)!
 Comment: 0,0:00:00.00,0:00:00.00,zh,,0,1240,0,template@dialog#recache;uninsert;append,{}{}
