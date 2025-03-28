@@ -1,4 +1,16 @@
-## 入门
+# 入门
+
+### Aegisub 自动载入脚本
+
+#### 安装版
+将lua文件放到`C:\Program Files\Aegisub\automation\autoload`中
+
+如果 Aegisub 安装在非默认位置，则同便携版
+
+#### 便携版
+将lua文件放到`.\automation\autoload`中
+
+### 使用
 
 先写一个简单的案例：
 
@@ -17,7 +29,7 @@
 这就是 `Tag Replace` 的核心思想——随时重载+完全可逆
 
 
-## 模式
+# 模式
 
 我们将特效栏为 `template` 开头的行简称为 `模板行` 或 `temp行`；`beretag` 开头的行简称为 `替换行` 或 `bere行`
 
@@ -67,3 +79,31 @@ Dialogue: 0,0:00:00.00,0:00:05.00,zh-top,,0,0,0,beretag@dialog,编辑字幕|Edit
 ```
 ![图片](https://github.com/user-attachments/assets/9dfe5789-06e7-4c2e-8671-0682350081cb)
 
+
+# 内置变量与关键字
+
+Tag Replace 存在一些内置变量，用于方便用户操作
+
+Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用 `$` 或 `user_var.` 作为开头，例如 `$number1`，本质上是 `$` 会被自动替换为 `user_var`
+
+关键字是会被直接替换的，它长得和全局变量一样，但不能真正调用到对应的变量，因为它会最优先被替换为对应值
+
+* sub / $sub  
+  `sub` 是使用规范中唯一允许用户调用的真正的全局变量，其与 `$sub` 一样，都是 Aegisub API 的 subtitle 对象
+* $kdur / user_var.kdur={0,0}  
+  这是 `\k` 标签后跟的值，可以在替换 karaok 标签时使用  
+  注意这是个关键字，如果需要调用其对应的变量，不能使用 `$`
+* $begin=find_event(sub)  
+  [Events]类型行的第一行，也是 Aegisub 字幕行的第一行对应的 index 号
+* $temp_line 当前所读取的template行的键  
+  调用对应行可以用 `sub[$temp_line]`
+* $bere_line 当前所读取的beretag行的键  
+  调用对应行可以用 `sub[$bere_line]`
+* $bere_text 当前被替换的文本
+
+
+# 内置函数
+
+Tag Replace 存在一些内置函数，用于调用特殊功能和更改模式处理
+
+Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用 `$` 或 `user_var.` 作为开头，例如 `$number1`，本质上是 `$` 会被自动替换为 `user_var.`
