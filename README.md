@@ -1,6 +1,7 @@
 # Tag Replace
 ## How to use
-View [Wiki](https://github.com/op200/Tag-Replace_for_Aegisub/wiki)
+~~View [Wiki](https://github.com/op200/Tag-Replace_for_Aegisub/wiki)~~  
+View [doc](https://github.com/op200/Tag-Replace_for_Aegisub/tree/main/doc)
 
 # Others
 ### VideoTimeMatch.lua
