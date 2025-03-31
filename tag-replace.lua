@@ -6,9 +6,10 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.4.1"
+script_version = "2.4.2"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
+local function get_class() end
 
 local user_var--自定义变量键值表
 user_var={
@@ -48,15 +49,58 @@ user_var={
 		local button = aegisub.dialog.display({{class="label",label=tostring(text):gsub("&", "&&")}})
 		if not button or to_exit then aegisub.cancel() end
 	end,
+	addClass=function(line, ...)
+		if not line.effect:find("^beretag@.") then user_var.debug(tr"Must beretag") return end
+		local class = get_class(line.effect, false)
+		local new_class = {select(1, ...)}
+		for k,v in pairs(new_class) do
+			table.insert(class, v)
+		end
+		local class_dict = {}
+		for k,v in pairs(class) do
+			class_dict[v] = true
+		end
+		class = {}
+		for k in pairs(class_dict) do
+			table.insert(class, k)
+		end
+		line.effect = "beretag@" .. table.concat(class, ";")
+	end,
+	delClass=function(line, ...)
+		if not line.effect:find("^beretag@.") then user_var.debug(tr"Must beretag") return end
+		local class = get_class(line.effect, false)
+		local del_class = {select(1, ...)}
+		local class_dict = {}
+		for k,v in pairs(class) do
+			class_dict[v] = true
+		end
+		for k,v in pairs(del_class) do
+			class_dict[v] = nil
+		end
+		class = {}
+		for k in pairs(class_dict) do
+			table.insert(class, k)
+		end
+		line.effect = "beretag@" .. table.concat(class, ";")
+	end,
+	newClass=function(line, ...)
+		if not line.effect:find("^beretag@.") then user_var.debug(tr"Must beretag") return end
+		local new_class = {select(1, ...)}
+		line.effect = "beretag@" .. table.concat(new_class, ";")
+	end,
 	--后处理
 	postProc=function(line)
 	end,
-	classmixProc=function(first, second)
+	classmixProc=function(first, second, new_class)
 		if not (first and second) then return first or second end
 		local new = first
 		new.text = new.text..second.text
-		local effect_table = {new.effect:match("([^@]*@[^#]*)(.*)")}
-		new.effect = effect_table[1]..';'..second.effect:match("@([^#]*)")..effect_table[2]
+		local effect_table = {new.effect:match("([^@]*@)(.*)")}
+		if new_class then
+			new.effect = effect_table[1]..new_class
+		else
+			new.effect = effect_table[1]..second.effect:match("@([^#]*)")..effect_table[2]
+		end
 		return new
 	end,
 	--处理
@@ -237,6 +281,23 @@ user_var={
 		return user_var.cmdCode([[python -c "]]..cmd..'"', popen)
 	end
 }
+setmetatable(user_var, {
+	__index = function(t, k)
+        if k == "this" then
+			local meta, styles = karaskel.collect_head(t.sub)
+			local line = t.sub[t.bere_line]
+			karaskel.preproc_line_pos(meta, styles, line)
+			t.this = line
+            return t.this
+		else
+			if t.this[k] then
+				return t.this[k]
+			else
+				t.debug(tr"Unknown key: " .. k)
+			end
+        end
+    end
+})
 local org_user_var = user_var.deepCopy(user_var)
 
 local function initialize(sub,begin)
@@ -262,7 +323,7 @@ local function initialize(sub,begin)
 	end
 end
 
-local function get_class(effect,is_temp)
+get_class = function(effect,is_temp)
 	local class={}
 	if is_temp then
 		for word in effect:match("@([^#]*)#"):gmatch("[^;]+") do
@@ -278,17 +339,28 @@ local function get_class(effect,is_temp)
 	return class
 end
 
-local function cmp_class(temp_effct,bere_effct)
+local function cmp_class(temp_effct, bere_effct, strict)
 	local temp_class=get_class(temp_effct,true)
 
 	local bere_class=get_class(bere_effct,false)
 
-	for i,j in ipairs(temp_class) do
-		for p,k in ipairs(bere_class) do
-			if j==k then return true end
+	if strict then
+		if #temp_class ~= #bere_class then return false end
+		table.sort(temp_class) table.sort(bere_class)
+		for i=1,#temp_class do
+			if temp_class[i] ~= bere_class[i] then
+				return false
+			end
 		end
+		return true
+	else
+		for i,j in pairs(temp_class) do
+			for p,k in pairs(bere_class) do
+				if j==k then return true end
+			end
+		end
+		return false
 	end
-	return false
 end
 
 local function get_mode(effect)--return table
@@ -298,6 +370,7 @@ local function get_mode(effect)--return table
 		cuttag=false,
 		strictstyle=false,
 		strictactor=false,
+		strictclass=false,
 		findtext=false,
 		append=false,
 		keyframe=false,
@@ -392,7 +465,7 @@ local append_num
 
 local function do_replace(sub, bere, mode, begin)--return int
 	if sub[bere].comment or not sub[bere].effect:find("^beretag") then return 1 end--若该行被注释或为非beretag行，则跳过
-	if not cmp_class(sub[user_var.temp_line].effect,sub[bere].effect) then return 1 end--判断该行class是否与模板行class有交集
+	if not cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass) then return 1 end--判断该行class是否与模板行class有交集
 	--准备replace
 	local insert_line, insert_table=sub[bere], {}
 	local find_pos, kdur_num=1, 2
@@ -462,7 +535,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 		local fps = user_var.forcefps or 23.976
 
 		local end_value_table = {}
-		for v in temp_re_tag:gmatch("[^\\]+") do
+		for v in var_expansion(temp_re_tag,1,sub):gmatch("[^\\]+") do
 			local pos=({v:find("^%d*%l+")})[2]
 			local head, value = v:sub(1,pos), v:sub(pos+1)
 			if value:find("^%(.*%)$") then
@@ -478,7 +551,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 		end
 
 		local value_table = {}
-		for v in temp_tag:gmatch("[^\\]+") do
+		for v in var_expansion(temp_tag,1,sub):gmatch("[^\\]+") do
 			local pos=({v:find("^%d*%l+")})[2]
 			local head, value = v:sub(1,pos), v:sub(pos+1)
 			if value:find("^%(.*%)$") then
@@ -498,7 +571,7 @@ local function do_replace(sub, bere, mode, begin)--return int
 		--判断并转换值类型
 		for i=1,#value_table do
 			for p=1,#value_table[i][2] do
-				if value_table[i][2][p][1]:find("^[%d%.]+$") then--十进制
+				if value_table[i][2][p][1]:find("^[%d%.]+$") and value_table[i][2][p][2]:find("^[%d%.]+$") then--十进制
 					value_table[i][3]=10
 				elseif value_table[i][2][p][1]:find("^&H%w+&?$") then--ASS颜色格式
 					value_table[i][3]="rgb"
@@ -740,98 +813,26 @@ local function do_macro(sub)
 				if mode.classmix then
 					local first_table,second_table = {},{}
 					local to_comment
-					if mode.strictstyle then
-						if mode.strictactor then
-							for bere = begin, #sub - append_num do
-								local temp_line,bere_line = sub[user_var.temp_line],sub[bere]
-								if temp_line.style == bere_line.style and temp_line.actor == bere_line.actor and cmp_class(temp_line.effect,bere_line.effect) then
-									to_comment = false
-									local first_class, second_class = temp_line.text:match("^{(.-)}"), temp_line.text:match("^{.-}{(.-)}")
-									if cmp_class('@'..first_class..'#',bere_line.effect) then
-										table.insert(first_table, user_var.deepCopy(bere_line))
-										to_comment = true
-									end
-									if cmp_class('@'..second_class..'#',bere_line.effect) then
-										table.insert(second_table, user_var.deepCopy(bere_line))
-										to_comment = true
-									end
-									if to_comment then
-										if bere_line.effect:find("^beretag@") then
-											bere_line.effect = ':'..bere_line.effect
-										end
-										bere_line.comment = true
-										sub[bere] = bere_line
-									end
-								end
+					local temp_line = sub[user_var.temp_line]
+					local first_class, second_class, new_class = temp_line.text:match("^{(.-)}{(.-)}{(.-)}")
+					for bere = begin, #sub - append_num do
+						local bere_line = sub[bere]
+						if (not mode.strictstyle or temp_line.style == bere_line.style) and (not mode.strictactor or temp_line.actor == bere_line.actor) and cmp_class(temp_line.effect,bere_line.effect, mode.strictclass) then
+							to_comment = false
+							if cmp_class('@'..first_class..'#',bere_line.effect, mode.strictclass) then
+								table.insert(first_table, user_var.deepCopy(bere_line))
+								to_comment = true
 							end
-						else
-							for bere = begin, #sub - append_num do
-								local temp_line,bere_line = sub[user_var.temp_line],sub[bere]
-								if sub[user_var.temp_line].style == sub[bere].style and cmp_class(temp_line.effect,bere_line.effect) then
-									to_comment = false
-									local first_class, second_class = temp_line.text:match("^{(.-)}"), temp_line.text:match("^{.-}{(.-)}")
-									if cmp_class('@'..first_class..'#',bere_line.effect) then
-										table.insert(first_table, user_var.deepCopy(bere_line))
-										to_comment = true
-									end
-									if cmp_class('@'..second_class..'#',bere_line.effect) then
-										table.insert(second_table, user_var.deepCopy(bere_line))
-										to_comment = true
-									end
-									if to_comment then
-										if bere_line.effect:find("^beretag@") then
-											bere_line.effect = ':'..bere_line.effect
-										end
-										bere_line.comment = true
-										sub[bere] = bere_line
-									end
-								end
+							if cmp_class('@'..second_class..'#',bere_line.effect, mode.strictclass) then
+								table.insert(second_table, user_var.deepCopy(bere_line))
+								to_comment = true
 							end
-						end
-					elseif mode.strictactor then
-						for bere = begin, #sub - append_num do
-							local temp_line,bere_line = sub[user_var.temp_line],sub[bere]
-							if sub[user_var.temp_line].actor == sub[bere].actor and cmp_class(temp_line.effect,bere_line.effect) then
-								to_comment = false
-								local first_class, second_class = temp_line.text:match("^{(.-)}"), temp_line.text:match("^{.-}{(.-)}")
-								if cmp_class('@'..first_class..'#',bere_line.effect) then
-									table.insert(first_table, user_var.deepCopy(bere_line))
-									to_comment = true
+							if to_comment then
+								if bere_line.effect:find("^beretag@") then
+									bere_line.effect = ':'..bere_line.effect
 								end
-								if cmp_class('@'..second_class..'#',bere_line.effect) then
-									table.insert(second, user_var.deepCopy(bere_line))
-									to_comment = true
-								end
-								if to_comment then
-									if bere_line.effect:find("^beretag@") then
-										bere_line.effect = ':'..bere_line.effect
-									end
-									bere_line.comment = true
-									sub[bere] = bere_line
-								end
-							end
-						end
-					else
-						for bere = begin, #sub - append_num do
-							local temp_line,bere_line = sub[user_var.temp_line],sub[bere]
-							if cmp_class(temp_line.effect,bere_line.effect) then
-								to_comment = false
-								local first_class, second_class = temp_line.text:match("^{(.-)}"), temp_line.text:match("^{.-}{(.-)}")
-								if cmp_class('@'..first_class..'#',bere_line.effect) then
-									table.insert(first_table, user_var.deepCopy(bere_line))
-									to_comment = true
-								end
-								if cmp_class('@'..second_class..'#',bere_line.effect) then
-									table.insert(second_table, user_var.deepCopy(bere_line))
-									to_comment = true
-								end
-								if to_comment then
-									if bere_line.effect:find("^beretag@") then
-										bere_line.effect = ':'..bere_line.effect
-									end
-									bere_line.comment = true
-									sub[bere] = bere_line
-								end
+								bere_line.comment = true
+								sub[bere] = bere_line
 							end
 						end
 					end
@@ -839,7 +840,7 @@ local function do_macro(sub)
 					--合并
 					local mix_table = {}
 					for i = 1,math.max(#first_table,#second_table) do
-						local new = user_var.classmixProc(first_table[i],second_table[i])
+						local new = user_var.classmixProc(first_table[i],second_table[i],new_class)
 						new.effect = "beretag!"..new.effect:sub(9)
 						table.insert(mix_table, new)
 					end
@@ -871,7 +872,7 @@ local function do_macro(sub)
 							while bere <= #sub - append_num do
 								if sub[user_var.temp_line].style == sub[bere].style and sub[user_var.temp_line].actor == sub[bere].actor
 								   and not sub[bere].comment and sub[bere].effect:find("^beretag")
-								   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect)
+								   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass)
 								then
 									user_var.bere_line = bere
 									var_expansion(sub[user_var.temp_line].text, 2, sub)
@@ -882,7 +883,7 @@ local function do_macro(sub)
 							while bere <= #sub - append_num do
 								if sub[user_var.temp_line].style == sub[bere].style
 								   and not sub[bere].comment and sub[bere].effect:find("^beretag")
-								   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect)
+								   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass)
 								then
 									user_var.bere_line = bere
 									var_expansion(sub[user_var.temp_line].text, 2, sub)
@@ -894,7 +895,7 @@ local function do_macro(sub)
 						while bere <= #sub - append_num do
 							if sub[user_var.temp_line].actor == sub[bere].actor
 							   and not sub[bere].comment and sub[bere].effect:find("^beretag")
-							   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect)
+							   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass)
 							then
 								user_var.bere_line = bere
 								var_expansion(sub[user_var.temp_line].text, 2, sub)
@@ -904,7 +905,7 @@ local function do_macro(sub)
 					else
 						while bere <= #sub - append_num do
 							if not sub[bere].comment and sub[bere].effect:find("^beretag")
-							   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect)
+							   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass)
 							then
 								user_var.bere_line = bere
 								var_expansion(sub[user_var.temp_line].text, 2, sub)
@@ -921,7 +922,7 @@ local function do_macro(sub)
 						end
 						local find_end = #sub
 						while bere<=find_end do--找到bere行
-							if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect) 
+							if not sub[bere].comment and sub[bere].effect:find("^beretag") and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass) 
 								and (not mode.strictactor or sub[user_var.temp_line].actor==sub[bere].actor) and (not mode.strictstyle or sub[user_var.temp_line].style==sub[bere].style) then
 	
 								if (user_var.keytext=="" or not user_var.keytext) and user_var.keyclip~="" and user_var.keyclip then--只有clip的情况
