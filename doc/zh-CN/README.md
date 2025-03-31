@@ -64,8 +64,8 @@ cuttime:
     {<start_tag>}{<end_tag>}
     bere行在时域上从start_tag渐变到end_tag
 classmix:
-    {<class>[;<class>...]}{<class>[;<class>...]}
-    合并两种类的行
+    {<class>[;<class>...]}{<class>[;<class>...]}[{<class>[;<class>...]}]
+    合并两种类的行，第三个{}中是新的class
 ```
 
 例如可以通过 `findtext` 模式和正则表达式，把 `中文|英文` 的行分割成双语字幕，并附带漏译检测($debug 函数中的形参就是检测到漏译后输出的文本)
