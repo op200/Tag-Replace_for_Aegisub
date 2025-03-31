@@ -48,6 +48,8 @@ strictstyle:
     严格匹配样式名(Style)，仅对同样式名的行执行替换
 strictactor:
     严格匹配说话人(Name)，仅对同说话人的行执行替换
+strictclass:
+    严格匹配class，必须所有class一致才会执行
 findtext:
     将匹配整行文本，而不是仅匹配标签
 append:
@@ -90,6 +92,9 @@ Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用
 
 * sub / $sub  
   `sub` 是使用规范中唯一允许用户调用的真正的全局变量，其与 `$sub` 一样，都是 Aegisub API 的 subtitle 对象
+* $this
+  当前 bere 行的 karaskel 处理后的只读副本，用于方便访问bere行的属性
+  同时允许 `$` 直接访问 `$this` 的属性，例如 `$start_time` `$top`
 * $kdur / user_var.kdur={0,0}  
   这是 `\k` 标签后跟的值，可以在替换 karaok 标签时使用  
   注意这是个关键字，如果需要调用其对应的变量，不能使用 `$`
