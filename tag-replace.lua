@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.4.4"
+script_version = "2.4.4.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -1025,7 +1025,7 @@ local function do_macro(sub)
 											end
 										end
 									else
-										user_var.debug([["]]..key_clip_table[1]..[[" is not supported]])
+										user_var.debug([[The $keyclip "]]..tostring(key_clip_table[1])..[[" is not supported]])
 									end
 
 									local key_line = sub[bere]
@@ -1277,10 +1277,10 @@ local function do_macro(sub)
 												bere = insert_pos - 1
 											end
 										else
-											user_var.debug([["]]..key_text_table[1]..[[" is not supported]])
+											user_var.debug([[The $keytext "]]..tostring(key_text_table[1])..[[" is not supported]], true)
 										end
 									else
-										user_var.debug(tr[["\pos" not found]])
+										user_var.debug(tr[["\pos" not found]], true)
 									end
 								end
 							end
