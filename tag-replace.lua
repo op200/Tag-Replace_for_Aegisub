@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.4.3"
+script_version = "2.4.4"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -33,36 +33,70 @@ user_var={
 	},
 	--功能性
 	deepCopy=function(add)
-        if add == nil then return nil end
+		if add == nil then return nil end
 
-        local visited = {}
+		local visited = {}
 
-        local function _deepCopy(obj)
-            if visited[obj] then
-                return visited[obj]
-            end
+		local function _deepCopy(obj)
+			if visited[obj] then
+				return visited[obj]
+			end
 
-            if type(obj) == "table" then
-                local copy = {}
-                visited[obj] = copy
+			if type(obj) == "table" then
+				local copy = {}
+				visited[obj] = copy
 
-                local mt = getmetatable(obj)
-                if mt then
-                    setmetatable(copy, mt)
-                end
+				local mt = getmetatable(obj)
+				if mt then
+					setmetatable(copy, mt)
+				end
 
-                for k, v in next, obj do
-                    copy[_deepCopy(k)] = _deepCopy(v)
-                end
+				for k, v in next, obj do
+					copy[_deepCopy(k)] = _deepCopy(v)
+				end
 
-                return copy
-            else
-                return obj
-            end
-        end
+				return copy
+			else
+				return obj
+			end
+		end
 
-        return _deepCopy(add)
-    end,
+		return _deepCopy(add)
+	end,
+	checkVer=function(ver, is_must_equal)
+		local pass = false
+
+		if is_must_equal then
+			if ver == script_version then
+				pass = true
+			end
+		else
+			local script_ver, input_ver = {}, {}
+			for v in script_version:gmatch("%d+") do
+				table.insert(script_ver, tonumber(v))
+			end
+			for v in ver:gmatch("%d+") do
+				table.insert(input_ver, tonumber(v))
+			end
+			local max_len = math.max(#script_ver, #input_ver)
+			for i = 1, max_len do
+				local script_num = script_ver[i] or 0
+				local input_num = input_ver[i] or 0
+				if script_num > input_num then
+					pass = true
+					break
+				elseif script_num < input_num then
+					pass = false
+					break
+				end
+				pass = true
+			end
+		end
+
+		if not pass then
+			user_var.debug("Tag Replace version mismatch", true)
+		end
+	end,
 	debug=function(text, to_exit)
 		local button = aegisub.dialog.display({{class="label",label=tostring(text):gsub("&", "&&")}})
 		if not button or to_exit then aegisub.cancel() end
@@ -168,6 +202,7 @@ user_var={
 
 		local meta, styles = karaskel.collect_head(user_var.sub)
 		local pos_line, line_num
+		local x1, y1, x2, y2
 	
 		if type(line_info) == "table" then
 			x1, y1, x2, y2 = line_info[1], line_info[2], line_info[3], line_info[4]
@@ -205,8 +240,8 @@ user_var={
 		step_set[2] = step_set[2] or rect_height + 1
 
 		tags = tags or {nil, nil}
-		color_tag = tags[1] or "c"
-		transparent_tag = tags[2] or "1a"
+		local color_tag = tags[1] or "c"
+		local transparent_tag = tags[2] or "1a"
 
 		control_points = control_points or {color1, color2, color3, color4}
 		for i = 1, #control_points do
@@ -309,27 +344,33 @@ user_var={
 local _this_line
 setmetatable(user_var, {
 	__index = function(t, k)
-        if k == "this" then
+		if k == "this" then
 			local num = t.bere_line - user_var.begin + 1
 			if _this_line and _this_line.num == num then return _this_line end
-			local meta, styles = karaskel.collect_head(t.sub)
 			_this_line = t.sub[t.bere_line]
-			karaskel.preproc_line_pos(meta, styles, _this_line)
+			setmetatable(_this_line, {
+				__index = function(_, _k)
+					_this_line = t.sub[t.bere_line]
+					local meta, styles = karaskel.collect_head(t.sub)
+					karaskel.preproc_line_pos(meta, styles, _this_line)
+					return _this_line[_k]
+				end	
+			})
 			_this_line.num = num
-            return _this_line
+			return _this_line
 		else
 			if t.this[k] then
-				return t.this[k]
+				return _this_line[k]
 			else
-				t.debug(tr"Unknown key: " .. k)
+				t.debug(tr"Unknown key: " .. k, true)
 			end
-        end
-    end
+		end
+	end
 })
-local org_user_var = user_var.deepCopy(user_var)
+local user_var_org = user_var.deepCopy(user_var)
 
 local function initialize(sub,begin)
-	user_var = org_user_var.deepCopy(org_user_var)
+	user_var = user_var_org.deepCopy(user_var_org)
 
 	local findline=begin
 	aegisub.progress.title(tr"Tag Replace - Initializing")
@@ -479,7 +520,7 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 		if not pos1 then break end
 		local load_fun, err = load("return function(sub,user_var) "..text:sub(pos1+1,pos2-1).." end")
 		if not load_fun then
-			user_var.debug(tr"[var_expansion] Error in template line "..(user_var.temp_line-user_var.begin+1)..": "..err)
+			user_var.debug(tr"[var_expansion] Error in template line "..user_var.num..": "..err)
 			aegisub.cancel()
 		end
 		local return_str = load_fun()(sub,user_var)
@@ -958,7 +999,7 @@ local function do_macro(sub)
 									local key_clip_point_table = {}
 									local key_clip_table = {}
 									for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table,line) end
-	
+
 									if key_clip_table[1]=="shake_shape_data 4.0" then
 										local height = select(1,karaskel.collect_head(user_var.sub)).res_y
 										for _,line in ipairs(key_clip_table) do
@@ -977,7 +1018,7 @@ local function do_macro(sub)
 												for _, coord in ipairs(coords) do
 													line = line..string.format("%.2f %.2f ", coord[1], coord[2])
 												end
-	
+
 												local _,pos2=line:find("^[^ ]- [^ ]- ")
 												table.insert(key_clip_point_table,
 													[[{\clip(m ]]..line:sub(0,pos2).."l"..line:sub(pos2)..")}")
@@ -986,13 +1027,15 @@ local function do_macro(sub)
 									else
 										user_var.debug([["]]..key_clip_table[1]..[[" is not supported]])
 									end
-	
+
+									local key_line = sub[bere]
+									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
 									local time_start, step_num, time_end = key_line.start_time, 1
 									if time_start<=0 then time_start = -400/fps end
 									time_end = time_start
 									if mode.append then
 										for i=1,#key_clip_point_table do
-											insert_key_line = key_line
+											local insert_key_line = key_line
 											insert_key_line.text = key_clip_point_table[i] .. insert_key_line.text
 	
 											insert_key_line.start_time = time_end
@@ -1005,7 +1048,7 @@ local function do_macro(sub)
 									else
 										local insert_pos = bere+1
 										for i=1,#key_clip_point_table do
-											insert_key_line = key_line
+											local insert_key_line = key_line
 											insert_key_line.text = key_clip_point_table[i] .. insert_key_line.text
 	
 											insert_key_line.start_time = time_end
@@ -1019,7 +1062,7 @@ local function do_macro(sub)
 										find_end = find_end + insert_pos - bere - 1
 										bere = insert_pos - 1
 									end
-									
+
 								else
 									if sub[bere].text:find([[\pos%([^,]-,[^,]-%)]]) then
 										if key_text_table[1]=="Adobe After Effects 6.0 Keyframe Data" then
@@ -1167,7 +1210,6 @@ local function do_macro(sub)
 												key_line.text:sub(pos_table[13],pos_table[14]),
 												key_line.text:sub(pos_table[15],pos_table[16])
 											}
-											abcasd = 1
 											--根据mode插入
 											local function key_line_value(num,i)
 												-- out_value[num][3][i][out_value[num][4]] 文件中当前行值
@@ -1184,7 +1226,7 @@ local function do_macro(sub)
 												end
 											end
 											time_end = time_start
-											key_rot_len = #key_rot
+											local key_rot_len = #key_rot
 											if mode.append then
 												for i=1,key_rot_len do
 													insert_key_line = key_line
@@ -1314,7 +1356,7 @@ local function do_macro(sub)
 			if sub[user_var.temp_line].effect:find("^template#") then
 				var_expansion(sub[user_var.temp_line].text, 2, sub)
 				if #user_var.subcache > 0 then--插入缓存行
-					mode = get_mode(sub[user_var.temp_line].effect)
+					local mode = get_mode(sub[user_var.temp_line].effect)
 					if mode.recache then
 						for i=1,#user_var.subcache do
 							user_var.subcache[i].effect = "beretag!"..user_var.subcache[i].effect:sub(9)

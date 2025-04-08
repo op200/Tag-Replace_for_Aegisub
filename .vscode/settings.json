@@ -1,0 +1,15 @@
+{
+    "Lua.diagnostics.globals": [
+        "script_description",
+        "aegisub",
+        "script_name",
+        "script_author",
+        "script_version",
+        "karaskel"
+    ],
+    "Lua.diagnostics.disable": [
+        "cast-local-type",
+        "unbalanced-assignments"
+    ],
+    "editor.tabSize": 3
+}
