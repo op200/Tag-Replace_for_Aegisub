@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.5"
+script_version = "2.5.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -1011,8 +1011,11 @@ local function do_macro(sub)
 									var_expansion(sub[user_var.temp_line].text, 2, sub)
 									if mode.uninsert then
 										local new_line = sub[bere]
-										new_line.comment = true
-										sub[bere] = new_line
+										if new_line.effect:find("^beretag@") then
+											new_line.comment = true
+											new_line.effect = ":" .. new_line.effect
+											sub[bere] = new_line
+										end
 									end
 								end
 								bere = bere + 1
@@ -1027,8 +1030,11 @@ local function do_macro(sub)
 									var_expansion(sub[user_var.temp_line].text, 2, sub)
 									if mode.uninsert then
 										local new_line = sub[bere]
-										new_line.comment = true
-										sub[bere] = new_line
+										if new_line.effect:find("^beretag@") then
+											new_line.comment = true
+											new_line.effect = ":" .. new_line.effect
+											sub[bere] = new_line
+										end
 									end
 								end
 								bere = bere + 1
@@ -1044,8 +1050,11 @@ local function do_macro(sub)
 								var_expansion(sub[user_var.temp_line].text, 2, sub)
 								if mode.uninsert then
 									local new_line = sub[bere]
-									new_line.comment = true
-									sub[bere] = new_line
+									if new_line.effect:find("^beretag@") then
+										new_line.comment = true
+										new_line.effect = ":" .. new_line.effect
+										sub[bere] = new_line
+									end
 								end
 							end
 							bere = bere + 1
@@ -1059,8 +1068,11 @@ local function do_macro(sub)
 								var_expansion(sub[user_var.temp_line].text, 2, sub)
 								if mode.uninsert then
 									local new_line = sub[bere]
-									new_line.comment = true
-									sub[bere] = new_line
+									if new_line.effect:find("^beretag@") then
+										new_line.comment = true
+										new_line.effect = ":" .. new_line.effect
+										sub[bere] = new_line
+									end
 								end
 							end
 							bere = bere + 1
