@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.4.4.1"
+script_version = "2.5"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -14,6 +14,7 @@ local function get_class() end
 local user_var--自定义变量键值表
 user_var={
 	sub,
+	progress={0,0},
 	subcache={},
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
 	begin,
@@ -31,7 +32,9 @@ user_var={
 			return start_value + factor * ((current_time ^ user_var.cuttime.accel) - 1)
 		end
 	},
+
 	--功能性
+
 	deepCopy=function(add)
 		if add == nil then return nil end
 
@@ -145,7 +148,9 @@ user_var={
 			table.insert(user_var.subcache, user_var.deepCopy(line))
 		end
 	end,
+
 	--后处理
+
 	postProc=function(line)
 	end,
 	keyProc=function(line, progress)
@@ -162,7 +167,65 @@ user_var={
 		end
 		return new
 	end,
+
 	--处理
+
+	-- @param line 
+	-- @param callback: function(line, position: dict, progress: list) -> nil  
+	-- 　@position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r}  
+	-- 　@progress: {x_fraction: list, y_fraction, x_percent: number, y_percent}  
+	-- @param step: list | nil  
+	-- 　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
+	-- 　　expand: list{number | nil} = {left, top, right, bottom}  
+	-- @param pos: list | nil  
+	-- 　{x: number | nil, y: number | nil}  
+	-- @return nil, insert subcache
+	gradient=function(line, callback, step, pos)
+		if not line.top then
+			local meta, styles = karaskel.collect_head(user_var.sub)
+			karaskel.preproc_line_pos(meta, styles, line)
+		end
+
+		local l, r, t, b = line.left, line.right, line.top, line.bottom
+
+		local w, h = r - l, b - t
+		step = step or {}
+		step = {step[1] or w+1,step[2] or h+1}
+
+		local expand = step[3] or {}
+		expand = {expand[1] or 0, expand[2] or 0, expand[3] or 0, expand[4] or 0}
+
+		local pos_tag = {line.text:match("\\pos%(([^,]-),([^%)]-)%)")}
+		pos = pos or {}
+		pos = {pos[1] or pos_tag[1] or line.x, pos[2] or pos_tag[2] or line.y}
+		if not pos[1] or not pos[2] then user_var.debug(tr"Need position", true) end
+
+		local offset_x, offset_y = pos[1] - line.x, pos[2] - line.y
+		l, r, t, b = l - expand[1] + offset_x, r + expand[3] + offset_x, t - expand[2] + offset_y, b + expand[4] + offset_y
+
+		for x = l, r, step[1] do
+			for y = t, b, step[2] do
+				local new_line = user_var.deepCopy(line)
+				new_line.text = string.format([[{\pos(%.2f,%.2f)\clip(%.2f,%.2f,%.2f,%.2f)}%s]],
+					pos[1], pos[2],
+					x, y, x + step[1], y + step[2],
+					new_line.text:gsub([[\pos%([^%)]-%)]], ""))
+				local w, h = r - l, b - t
+				local x_relative, y_relative = x - l, y - t
+				callback(new_line,
+					{
+						x = x, y = y, l = l, r = r, t = t, b = b,
+						w = w, h = h, x_r = x_relative, y_r = y_relative },
+					{
+						{ x_relative, w },
+						{ y_relative, h },
+						100 * x_relative / w,
+						100 * y_relative / h })
+				table.insert(user_var.subcache, new_line)
+			end
+		end
+
+	end,
 	colorGradient=function(line_info, rgba, step_set, tags, control_points, pos)
 		-- 计算组合数
 		math.comb = function(n, k)
@@ -326,7 +389,9 @@ user_var={
 
 		return result
 	end,
+
 	--外部
+
 	cmdCode=function(cmd, popen)
 		if popen then
 			local handle = io.popen(cmd)
@@ -855,7 +920,6 @@ local function find_event(sub)
 end
 
 local function do_macro(sub)
-	local progress_refresh_time=0
 	local begin=find_event(sub)
 	initialize(sub,begin)--初始化，删除所有beretag!行，并还原:beretag@行
 	user_var.temp_line=begin
@@ -863,18 +927,18 @@ local function do_macro(sub)
 	user_var.begin=begin
 	append_num=0--初始化append边界
 	aegisub.progress.title(tr"Tag Replace - Replace")
-	local progress_total = 0
 	for i = begin, #sub do
 		if sub[i].effect:find("^template") and sub[i].comment then
-			progress_total = progress_total + 1
+			user_var.progress[2] = user_var.progress[2] + 1
 		end
 	end
 	while user_var.temp_line<=#sub do
-		if aegisub.progress.is_cancelled() then aegisub.cancel() end
-		aegisub.progress.set(100*user_var.temp_line/progress_total)
-
 		--Find template lines. 检索模板行
 		if sub[user_var.temp_line].comment then
+			if aegisub.progress.is_cancelled() then aegisub.cancel() end
+			aegisub.progress.set(100 * user_var.progress[1] / math.max(user_var.progress[2], 1))
+			user_var.progress[1] = user_var.progress[1] + 1
+
 			if sub[user_var.temp_line].effect:find("^template@[^#]-#.*$") then
 				local mode = get_mode(sub[user_var.temp_line].effect)
 				local bere = begin
@@ -945,6 +1009,11 @@ local function do_macro(sub)
 								then
 									user_var.bere_line = bere
 									var_expansion(sub[user_var.temp_line].text, 2, sub)
+									if mode.uninsert then
+										local new_line = sub[bere]
+										new_line.comment = true
+										sub[bere] = new_line
+									end
 								end
 								bere = bere + 1
 							end
@@ -956,6 +1025,11 @@ local function do_macro(sub)
 								then
 									user_var.bere_line = bere
 									var_expansion(sub[user_var.temp_line].text, 2, sub)
+									if mode.uninsert then
+										local new_line = sub[bere]
+										new_line.comment = true
+										sub[bere] = new_line
+									end
 								end
 								bere = bere + 1
 							end
@@ -968,6 +1042,11 @@ local function do_macro(sub)
 							then
 								user_var.bere_line = bere
 								var_expansion(sub[user_var.temp_line].text, 2, sub)
+								if mode.uninsert then
+									local new_line = sub[bere]
+									new_line.comment = true
+									sub[bere] = new_line
+								end
 							end
 							bere = bere + 1
 						end
@@ -978,6 +1057,11 @@ local function do_macro(sub)
 							then
 								user_var.bere_line = bere
 								var_expansion(sub[user_var.temp_line].text, 2, sub)
+								if mode.uninsert then
+									local new_line = sub[bere]
+									new_line.comment = true
+									sub[bere] = new_line
+								end
 							end
 							bere = bere + 1
 						end

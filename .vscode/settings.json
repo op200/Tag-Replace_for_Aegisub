@@ -9,7 +9,11 @@
     ],
     "Lua.diagnostics.disable": [
         "cast-local-type",
-        "unbalanced-assignments"
+        "unbalanced-assignments",
+        "undefined-global",
+        "redundant-parameter",
+        "param-type-mismatch",
+        "need-check-nil"
     ],
     "editor.tabSize": 3
 }
