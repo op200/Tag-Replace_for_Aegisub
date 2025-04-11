@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.5.1"
+script_version = "2.5.2"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -403,7 +403,7 @@ user_var={
 		end
 	end,
 	pyCode=function(cmd, popen)
-		return user_var.cmdCode([[python -c "]]..cmd..'"', popen)
+		return user_var.cmdCode(string.format([[python -c "%s"]], cmd), popen)
 	end
 }
 local _this_line
@@ -427,7 +427,7 @@ setmetatable(user_var, {
 			if t.this[k] then
 				return _this_line[k]
 			else
-				t.debug(tr"Unknown key: " .. k, true)
+				t.debug(tr"Unknown key: " .. tostring(k), true)
 			end
 		end
 	end
@@ -436,6 +436,7 @@ local user_var_org = user_var.deepCopy(user_var)
 
 local function initialize(sub,begin)
 	user_var = user_var_org.deepCopy(user_var_org)
+	_this_line = nil
 
 	local findline=begin
 	aegisub.progress.title(tr"Tag Replace - Initializing")
@@ -585,7 +586,7 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 		if not pos1 then break end
 		local load_fun, err = load("return function(sub,user_var) "..text:sub(pos1+1,pos2-1).." end")
 		if not load_fun then
-			user_var.debug(tr"[var_expansion] Error in template line "..user_var.num..": "..err)
+			user_var.debug(string.format(tr"[var_expansion] Error in template line %d: %s", user_var.num, err))
 			aegisub.cancel()
 		end
 		local return_str = load_fun()(sub,user_var)
