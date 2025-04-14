@@ -91,8 +91,6 @@ Dialogue: 0,0:00:00.00,0:00:05.00,zh-top,,0,0,0,beretag@dialog,编辑字幕|Edit
 可以直接使用 $ 扩展变量 `{\k%d*}{\kf$kdur}`  
 可以使用 !! 扩展整个 Lua 语句 `{\blur0}{\blur!local r=math.random(5) if r==3 then r=666 end return r!}`
 
-目前版本 $ 扩展的优先级高于 !! 扩展，以后可能会改成按顺序扩展
-
 
 # 内置变量与关键字
 
