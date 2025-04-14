@@ -82,6 +82,16 @@ Dialogue: 0,0:00:00.00,0:00:05.00,zh-top,,0,0,0,beretag@dialog,编辑字幕|Edit
 ![图片](https://github.com/user-attachments/assets/9dfe5789-06e7-4c2e-8671-0682350081cb)
 
 
+# 表达式与变量扩展
+
+通过“扩展”语法，可以将自定义的计算后的值插入文本
+
+可以直接使用 $ 扩展变量 `{\k%d*}{\kf$kdur}`  
+可以使用 !! 扩展整个 Lua 语句 `{\blur0}{\blur!local r=math.random(5) if r==3 then r=666 end return r!}`
+
+目前版本 $ 扩展的优先级高于 !! 扩展，以后可能会改成按顺序扩展
+
+
 # 内置变量与关键字
 
 Tag Replace 存在一些内置变量，用于方便用户操作
@@ -95,20 +105,60 @@ Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用
 * $this
   当前 bere 行的 karaskel 处理后的只读副本，用于方便访问bere行的属性
   同时允许 `$` 直接访问 `$this` 的属性，例如 `$start_time` `$top`
+  额外给 `$this` 增加了一个整数成员属性 `$this.num`，是其 Aegisub 中用户看到的行号
+* $progress={0,0}  
+  当前进度的分子分母
+* $subcache  
+  待插入的字幕行列表，可使用 `table.insert($subcache, line)` 手动插入行
 * $kdur / user_var.kdur={0,0}  
   这是 `\k` 标签后跟的值，可以在替换 karaok 标签时使用  
   注意这是个关键字，如果需要调用其对应的变量，不能使用 `$`
+* $start $mid $end  
+  这几个同样是关键字，但它们与 $kdur 不同的是，它们没有对应的变量，它们是实时计算出来的
+  配合 `\t` 使用，可实现简单的 karaok 效果
 * $begin=find_event(sub)  
   [Events]类型行的第一行，也是 Aegisub 字幕行的第一行对应的 index 号
-* $temp_line 当前所读取的template行的键  
+* $temp_line
+  当前所读取的template行的键  
   调用对应行可以用 `sub[$temp_line]`
-* $bere_line 当前所读取的beretag行的键  
+* $bere_line
+  当前所读取的beretag行的键  
   调用对应行可以用 `sub[$bere_line]`
-* $bere_text 当前被替换的文本
+* $bere_text
+  当前被替换的文本
+* $forcefps=nil  
+  有值时，部分模式或函数按此值计算时轴
+* $keytext $keyclip  
+  `keyframe` 模式相关
+* $cuttime={frame_model=true, accel=1, interpolate=function(current_time, total_time, start_value, end_value, tag)}
+  `cuttime` 模式相关
 
 
 # 内置函数
 
 Tag Replace 存在一些内置函数，用于调用特殊功能和更改模式处理
 
-Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用 `$` 或 `user_var.` 作为开头，例如 `$number1`，本质上是 `$` 会被自动替换为 `user_var.`
+Tag Replace 的操作规范中，局部变量同 Lua 语法，全局变量使用 `$` 或 `user_var.` 作为开头，例如 `$number1`，本质上是 `$` 会被自动替换为 `user_var.`
+
+功能性
+* deepCopy
+* checkVer
+* debug
+* addClass
+* delClass
+* newClass
+* addLine
+
+后处理
+* postProc
+* keyProc
+* classmixProc
+
+行处理
+* gradient
+* colorGradient
+* getTagCut
+
+调用外部
+* cmdCode
+* pyCode
