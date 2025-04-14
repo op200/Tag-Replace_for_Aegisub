@@ -56,6 +56,7 @@ append:
     新的行将被append到所有字幕行的末尾，而不是bere行的后面
 keyframe:
     将先执行关键帧替换，对应关键帧文本为 $keytext，蒙蔽为 $keyclip
+    可通过 $forcefps 修改帧率，否则根据输入的追踪数据里的帧率计算时轴
 recache:
     将缓存行($subcache)插入到字幕
 uninsert:
@@ -63,6 +64,7 @@ uninsert:
 cuttime:
     {<start_tag>}{<end_tag>}
     bere行在时域上从start_tag渐变到end_tag
+    修改 $cuttime 中的成员，可切换帧模式、修改加速度、自定义处理函数
 classmix:
     {<class>[;<class>...]}{<class>[;<class>...]}[{<class>[;<class>...]}]
     合并两种类的行，第三个{}中是新的class
@@ -102,35 +104,35 @@ Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用
 
 * sub / $sub  
   `sub` 是使用规范中唯一允许用户调用的真正的全局变量，其与 `$sub` 一样，都是 Aegisub API 的 subtitle 对象
-* $this
+* \$this
   当前 bere 行的 karaskel 处理后的只读副本，用于方便访问bere行的属性
   同时允许 `$` 直接访问 `$this` 的属性，例如 `$start_time` `$top`
   额外给 `$this` 增加了一个整数成员属性 `$this.num`，是其 Aegisub 中用户看到的行号
-* $progress={0,0}  
+* \$progress={0,0}  
   当前进度的分子分母
-* $subcache  
+* \$subcache  
   待插入的字幕行列表，可使用 `table.insert($subcache, line)` 手动插入行
-* $kdur / user_var.kdur={0,0}  
+* \$kdur / user_var.kdur={0,0}  
   这是 `\k` 标签后跟的值，可以在替换 karaok 标签时使用  
   注意这是个关键字，如果需要调用其对应的变量，不能使用 `$`
-* $start $mid $end  
+* \$start $mid $end  
   这几个同样是关键字，但它们与 $kdur 不同的是，它们没有对应的变量，它们是实时计算出来的
   配合 `\t` 使用，可实现简单的 karaok 效果
-* $begin=find_event(sub)  
+* \$begin=find_event(sub)  
   [Events]类型行的第一行，也是 Aegisub 字幕行的第一行对应的 index 号
-* $temp_line
+* \$temp_line
   当前所读取的template行的键  
   调用对应行可以用 `sub[$temp_line]`
-* $bere_line
+* \$bere_line
   当前所读取的beretag行的键  
   调用对应行可以用 `sub[$bere_line]`
-* $bere_text
+* \$bere_text
   当前被替换的文本
-* $forcefps=nil  
+* \$forcefps=nil  
   有值时，部分模式或函数按此值计算时轴
-* $keytext $keyclip  
+* \$keytext $keyclip  
   `keyframe` 模式相关
-* $cuttime={frame_model=true, accel=1, interpolate=function(current_time, total_time, start_value, end_value, tag)}
+* \$cuttime={frame_model=true, accel=1, interpolate: function}
   `cuttime` 模式相关
 
 
@@ -141,24 +143,48 @@ Tag Replace 存在一些内置函数，用于调用特殊功能和更改模式�
 Tag Replace 的操作规范中，局部变量同 Lua 语法，全局变量使用 `$` 或 `user_var.` 作为开头，例如 `$number1`，本质上是 `$` 会被自动替换为 `user_var.`
 
 功能性
-* deepCopy
-* checkVer
-* debug
-* addClass
-* delClass
-* newClass
-* addLine
+* \$deepCopy(add)  
+  深复制 table 类型的变量
+* \$checkVer(ver: str, is_must_equal: bool) -> nil  
+  检查当前脚本版本是否≥指定版本，`is_must_equal` 可以强制等于
+* \$debug(text, to_exit: bool)  
+  弹窗输入的文本，按`确定`继续，按`取消`退出执行，`to_exit` 可以强制退出执行
+* \$addClass(line, ...: str) -> nil  
+  向字幕行对象添加任意个 class
+* \$delClass(line, ...: str) -> nil  
+  删除字幕行对象中任意个 class
+* \$newClass(line, ...: str) -> nil  
+  将字幕行对象中 class 替换为指定 class
+* \$addLine(...) -> nil
+  向 `$subcache` 中插入 `$deepCopy(line)`
 
 后处理
-* postProc
-* keyProc
-* classmixProc
+* \$cuttime.interpolate(current_time, total_time, start_value, end_value, tag)  
+  cuttime 模式的后处理函数
+* \$postProc(line)  
+  一般模式的后处理函数
+* \$keyProc(line, progress)  
+  keyframe 模式的后处理函数
+* \$classmixProc  
+  classmix 模式的后处理函数
 
 行处理
-* gradient
-* colorGradient
-* getTagCut
+* \$gradient(line, callback, step, pos) -> nil  
+  @param line  
+	@param callback: function(line, position: dict, progress: list) -> nil  
+	　@position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r}  
+	　@progress: {x_fraction: list, y_fraction, x_percent: number, y_percent}  
+	@param step: list | nil  
+	　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
+	　　expand: list{number | nil} = {left, top, right, bottom}  
+	@param pos: list | nil  
+	　{x: number | nil, y: number | nil}
+* \$colorGradient(line_info, rgba, step_set, tags, control_points, pos)  
+  见旧版文档
+* \$getTagCut(text: str)  
+  输入一个字符串，返回按 tag 的出现顺序切割成的 table `{{text: str, is_tag: bool, num: int}, ...}`  
+  e.g. `$getTagCut("1{22}333{}{}")` -> `{{"1", false, 1}, {"{22}", true, 1}, {"333", false, 2}, {"{}", true, 2}, {"{}", true, 3}}`
 
 调用外部
-* cmdCode
-* pyCode
+* \$cmdCode(cmd: str, popen: bool)
+* \$pyCode(cmd: str, popen: bool)

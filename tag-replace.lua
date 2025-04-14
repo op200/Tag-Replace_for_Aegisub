@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.5.2"
+script_version = "2.5.3"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -17,13 +17,14 @@ user_var={
 	progress={0,0},
 	subcache={},
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
-	begin,
-	temp_line,
-	bere_line,
+	begin=nil,
+	temp_line=nil,
+	bere_line=nil,
+	bere_text="",
+	bere_match={},
+	forcefps=nil,
 	keytext="",
 	keyclip="",
-	forcefps=false,
-	bere_text="",
 	cuttime={
 		frame_model=true,
 		accel=1,
@@ -168,9 +169,9 @@ user_var={
 		return new
 	end,
 
-	--处理
+	--行处理
 
-	-- @param line 
+	-- @param line  
 	-- @param callback: function(line, position: dict, progress: list) -> nil  
 	-- 　@position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r}  
 	-- 　@progress: {x_fraction: list, y_fraction, x_percent: number, y_percent}  
@@ -571,12 +572,7 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 			elseif var=="mid" then
 				text = text:sub(1,pos1-1)..math.floor((user_var.kdur[re_num-1] + user_var.kdur[re_num]) * 5)..text:sub(pos2+1)
 			else
-				--扩展用户变量(这里必须给text赋值，否则扩展表达式无变量使用)
-				if user_var[var]~=nil then
-					text = text:sub(1,pos1-1)..user_var[var]..text:sub(pos2+1)
-				else
-					text = text:sub(1,pos1-1).."user_var."..var..text:sub(pos2+1)
-				end
+				text = text:sub(1,pos1-1).."!return user_var."..var.."!"..text:sub(pos2+1)
 			end
 		end
 	end
@@ -635,8 +631,11 @@ local function do_replace(sub, bere, mode, begin)--return int
 			table.insert(pos_table,insert_line.text:len()+1)
 			for i=1,#pos_table-1 do
 				local new_text = insert_line.text:sub(pos_table[i],pos_table[i+1]-1)
-				local pos1, pos2 = new_text:find(var_expansion(temp_tag,re_num,sub))
+				local find_list = {new_text:find(var_expansion(temp_tag,re_num,sub))}
+				local pos1, pos2 = find_list[1], find_list[2]
+				table.remove(find_list, 1) table.remove(find_list, 1)
 				user_var.bere_text = new_text:sub(pos1,pos2)
+				user_var.bere_match = find_list
 
 				new_text = new_text:sub(1,pos1-1) .. var_expansion(temp_re_tag,re_num,sub) .. new_text:sub(pos2+1)
 				table.insert(insert_table, new_text)
@@ -658,8 +657,11 @@ local function do_replace(sub, bere, mode, begin)--return int
 			table.insert(pos_table,insert_line.text:len()+1)
 			for i=1,#pos_table-1 do
 				local new_text = insert_line.text:sub(pos_table[i],pos_table[i+1]-1)
-				local pos1, pos2 = new_text:find(var_expansion(temp_tag,re_num,sub))
+				local find_list = {new_text:find(var_expansion(temp_tag,re_num,sub))}
+				local pos1, pos2 = find_list[1], find_list[2]
+				table.remove(find_list, 1) table.remove(find_list, 1)
 				user_var.bere_text = new_text:sub(pos1,pos2)
+				user_var.bere_match = find_list
 				
 				new_text = new_text:sub(1,pos1-1) .. var_expansion(temp_re_tag,re_num,sub) .. new_text:sub(pos2+1)
 				table.insert(insert_table, new_text)
@@ -801,9 +803,12 @@ local function do_replace(sub, bere, mode, begin)--return int
 		end
 		while true do
 			if mode.findtext then
-				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
+				local find_list = {insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)}
+				local pos1, pos2 = find_list[1], find_list[2]
 				if not pos1 then break end
+				table.remove(find_list, 1) table.remove(find_list, 1)
 				user_var.bere_text = insert_line.text:sub(pos1,pos2)
+				user_var.bere_match = find_list
 
 				find_pos = pos2 + 1 - insert_line.text:len()--先减原长再加新长，防止出现正则表达式导致的字数不同问题
 				insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_add_tail,re_num,sub)..insert_line.text:sub(pos2+1)--插入temp_add_tail
@@ -811,9 +816,12 @@ local function do_replace(sub, bere, mode, begin)--return int
 
 				re_num = re_num+1
 			else
-				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
+				local find_list = {insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)}
+				local pos1, pos2 = find_list[1], find_list[2]
 				if not pos1 then break end
+				table.remove(find_list, 1) table.remove(find_list, 1)
 				user_var.bere_text = insert_line.text:sub(pos1,pos2)
+				user_var.bere_match = find_list
 				--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
 				local pos3 = insert_line.text:find("}",pos2+1)--记录temp_tag后的}的位置
 
