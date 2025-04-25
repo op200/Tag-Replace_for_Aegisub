@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.5.3"
+script_version = "2.5.4"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -1317,17 +1317,22 @@ local function do_macro(sub)
 											}
 											--根据mode插入
 											local function key_line_value(num,i)
-												-- out_value[num][3][i][out_value[num][4]] 文件中当前行值
-												-- out_value[num][3][1][out_value[num][4]] 文件中第一行值
-												-- out_value[num][2] 字幕中当前行值
-												if insert_key_line_table[num]:sub(-1)=='x' or insert_key_line_table[num]:sub(-1)=='y' then
+												-- out_value[num][3][i][out_value[num][4]] keytext 当前行值
+												-- out_value[num][3][1][out_value[num][4]] keytext 第一行值
+												-- out_value[num][2] beretag 对应标签的值
+												local _char = insert_key_line_table[num]:sub(-1)
+												if _char=='x' or _char=='y' then
 													return
 														insert_key_line_table[num] ..
-														math.floor((out_value[num][3][i][out_value[num][4]]/out_value[num][3][1][out_value[num][4]]*out_value[num][2])*100+0.5)/100
+														math.floor((out_value[num][2] * out_value[num][3][i][out_value[num][4]] / out_value[num][3][1][out_value[num][4]])*100+0.5)/100
+												elseif _char=='z' then
+													return
+														insert_key_line_table[num] ..
+														math.floor((out_value[num][2] - out_value[num][3][i][out_value[num][4]] + out_value[num][3][1][out_value[num][4]])*100+0.5)/100
 												else
 													return
 														insert_key_line_table[num] ..
-														math.floor((out_value[num][3][i][out_value[num][4]]-out_value[num][3][1][out_value[num][4]]+out_value[num][2])*100+0.5)/100
+														math.floor((out_value[num][2] + out_value[num][3][i][out_value[num][4]] - out_value[num][3][1][out_value[num][4]])*100+0.5)/100
 												end
 											end
 											time_end = time_start
