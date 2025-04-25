@@ -100,11 +100,11 @@ Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用
 
 关键字是会被直接替换的，它长得和全局变量一样，但不能真正调用到对应的变量，因为它会最优先被替换为对应值
 
-* sub / $sub  
+* sub / \$sub  
   `sub` 是使用规范中唯一允许用户调用的真正的全局变量，其与 `$sub` 一样，都是 Aegisub API 的 subtitle 对象
-* \$this
-  当前 bere 行的 karaskel 处理后的只读副本，用于方便访问bere行的属性
-  同时允许 `$` 直接访问 `$this` 的属性，例如 `$start_time` `$top`
+* \$this  
+  当前 bere 行的 karaskel 处理后的只读副本，用于方便访问bere行的属性  
+  同时允许 `$` 直接访问 `$this` 的属性，例如 `$start_time` `$top`  
   额外给 `$this` 增加了一个整数成员属性 `$this.num`，是其 Aegisub 中用户看到的行号
 * \$progress={0,0}  
   当前进度的分子分母
@@ -118,19 +118,19 @@ Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用
   配合 `\t` 使用，可实现简单的 karaok 效果
 * \$begin=find_event(sub)  
   [Events]类型行的第一行，也是 Aegisub 字幕行的第一行对应的 index 号
-* \$temp_line
+* \$temp_line  
   当前所读取的template行的键  
   调用对应行可以用 `sub[$temp_line]`
-* \$bere_line
+* \$bere_line  
   当前所读取的beretag行的键  
   调用对应行可以用 `sub[$bere_line]`
-* \$bere_text
+* \$bere_text  
   当前被替换的文本
 * \$forcefps=nil  
   有值时，部分模式或函数按此值计算时轴
 * \$keytext $keyclip  
   `keyframe` 模式相关
-* \$cuttime={frame_model=true, accel=1, interpolate: function}
+* \$cuttime={frame_model=true, accel=1, interpolate: function}  
   `cuttime` 模式相关
 
 
