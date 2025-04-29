@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.5.4"
+script_version = "2.5.5"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -17,12 +17,12 @@ user_var={
 	progress={0,0},
 	subcache={},
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
-	begin=nil,
-	temp_line=nil,
-	bere_line=nil,
+	begin=false,
+	temp_line=false,
+	bere_line=false,
 	bere_text="",
 	bere_match={},
-	forcefps=nil,
+	forcefps=false,
 	keytext="",
 	keyclip="",
 	cuttime={
@@ -182,16 +182,89 @@ user_var={
 	-- 　{x: number | nil, y: number | nil}  
 	-- @return nil, insert subcache
 	gradient=function(line, callback, step, pos)
-		if not line.top then
-			local meta, styles = karaskel.collect_head(user_var.sub)
-			karaskel.preproc_line_pos(meta, styles, line)
+		local meta, styles = karaskel.collect_head(user_var.sub)
+		local style = styles[line.style]
+
+		-- 根据头部 {} 中的 \pos \an? \fs[+-]? \fsp \fsc[xy] \[xy]?bord \[xy]?shad 标签重计算位置, pos 不是 style 中的, 放最后单独计算
+		local tags = line.text:gsub("}{", ""):match("^{(.-)}") or ""
+
+		for n, a in tags:gmatch("\\a(n?)(%d+)") do -- \an?
+			if n == 'n' then
+				style.align = tonumber(a)
+			else
+				style.align = ({1,2,3, 7,7,8,9, 7,4,5,6})[tonumber(a)]
+			end
 		end
 
-		local l, r, t, b = line.left, line.right, line.top, line.bottom
+		for fs in tags:gmatch("\\fs(%d+%.?%d+)") do -- \fs
+			style.fontsize = tonumber(fs)
+		end
 
+		for c, fs in tags:gmatch("\\fs([%+%-])(%d+%.?%d+)") do -- \fs[+-]
+			if c == '+' then
+				style.fontsize = (1 + fs / 10) * style.fontsize
+			else
+				style.fontsize = (1 - fs / 10) * style.fontsize
+			end
+		end
+
+		for fsp in tags:gmatch("\\fsp(%-?%d+%.?%d+)") do -- \fsp
+			style.spacing = tonumber(fsp)
+		end
+
+		for p, fsc in tags:gmatch("\\fsc([xy])(%d+%.?%d+)") do -- \fsc[xy]
+			if p == 'x' then
+				style.scale_x = tonumber(fsc)
+			else
+				style.scale_y = tonumber(fsc)
+			end
+		end
+
+		karaskel.preproc_line_size(meta, styles, line)
+		karaskel.preproc_line_pos(meta, styles, line)
+
+		-- \[xy]?bord
+		local bord = {style.outline, style.outline}
+		for p, b in tags:gmatch("\\([xy]?)bord(%d+%.?%d+)") do
+			if p == 'x' then
+				bord[1] = tonumber(b)
+			elseif p == 'y' then
+				bord[2] = tonumber(b)
+			else
+				b = tonumber(b)
+				bord = {b, b}
+			end
+		end
+
+		-- \[xy]?shad
+		local shad = {style.shadow, style.shadow}
+		for p, s in tags:gmatch("\\([xy]?)shad(%d+%.?%d+)") do
+			if p == 'x' then
+				shad[1] = tonumber(s)
+			elseif p == 'y' then
+				shad[2] = tonumber(s)
+			else
+				s = tonumber(s)
+				shad = {s, s}
+			end
+		end
+
+		local l, r, t, b = line.left, line.right - line.styleref.spacing * 2, line.top, line.bottom
+		l, r, t, b = l - bord[1], r + bord[1], t - bord[2], b + bord[2]
+		if shad[1] > 0 then
+			r = r + shad[1]
+		else
+			l = l + shad[1]
+		end
+		if shad[2] > 0 then
+			b = b + shad[2]
+		else
+			t = t + shad[2]
+		end
 		local w, h = r - l, b - t
+
 		step = step or {}
-		step = {step[1] or w+1,step[2] or h+1}
+		step = {step[1] or w+1, step[2] or h+1}
 
 		local expand = step[3] or {}
 		expand = {expand[1] or 0, expand[2] or 0, expand[3] or 0, expand[4] or 0}
@@ -225,7 +298,6 @@ user_var={
 				table.insert(user_var.subcache, new_line)
 			end
 		end
-
 	end,
 	colorGradient=function(line_info, rgba, step_set, tags, control_points, pos)
 		-- 计算组合数
@@ -407,10 +479,13 @@ user_var={
 		return user_var.cmdCode(string.format([[python -c "%s"]], cmd), popen)
 	end
 }
-local _this_line
+local _this_line, _this_index_time = nil, 0
 setmetatable(user_var, {
 	__index = function(t, k)
-		if k == "this" then
+		if _this_index_time > 2	 or not t.bere_line then
+			_this_index_time = 0
+			return nil
+		elseif k == "this" then
 			local num = t.bere_line - user_var.begin + 1
 			if _this_line and _this_line.num == num then return _this_line end
 			_this_line = t.sub[t.bere_line]
@@ -423,12 +498,16 @@ setmetatable(user_var, {
 				end	
 			})
 			_this_line.num = num
+			_this_index_time = 0
 			return _this_line
 		else
+			_this_index_time = _this_index_time + 1
 			if t.this[k] then
+				_this_index_time = 0
 				return _this_line[k]
 			else
-				t.debug(tr"Unknown key: " .. tostring(k), true)
+				_this_index_time = 0
+				return nil
 			end
 		end
 	end
@@ -559,7 +638,7 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 	end
 	--扩展变量
 	while true do
-		pos1, pos2 = text:find("%$[%w_]+")
+		pos1, pos2 = text:find("%$[%w_%[%]]+")
 		if not pos1 then break end
 		local var = text:sub(pos1+1,pos2)
 		if var~="" then--扩展预留关键词
@@ -582,7 +661,7 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 		if not pos1 then break end
 		local load_fun, err = load("return function(sub,user_var) "..text:sub(pos1+1,pos2-1).." end")
 		if not load_fun then
-			user_var.debug(string.format(tr"[var_expansion] Error in template line %d: %s", user_var.num, err))
+			user_var.debug(string.format(tr"[var_expansion] Error in template line %s and beretag line %s: %s", user_var.temp_line, user_var.num, err))
 			aegisub.cancel()
 		end
 		local return_str = load_fun()(sub,user_var)
@@ -1169,229 +1248,236 @@ local function do_macro(sub)
 									end
 
 								else
-									if sub[bere].text:find([[\pos%([^,]-,[^,]-%)]]) then
-										if key_text_table[1]=="Adobe After Effects 6.0 Keyframe Data" then
-											--补全tag
-											local key_line = sub[bere]
-											if not sub[bere].text:find([[\fscx%d]]) then
-												local pos = key_line.text:find("}")
-												key_line.text = key_line.text:sub(1,pos-1)..[[\fscx100]]..key_line.text:sub(pos)
-											end
-											if not sub[bere].text:find([[\fscy%d]]) then
-												local pos = key_line.text:find("}")
-												key_line.text = key_line.text:sub(1,pos-1)..[[\fscy100]]..key_line.text:sub(pos)
-											end
-											if not sub[bere].text:find([[\frz%-?%d]]) then
-												local pos = key_line.text:find("}")
-												key_line.text = key_line.text:sub(1,pos-1)..[[\frz0]]..key_line.text:sub(pos)
-											end
-											if not sub[bere].text:find([[\org%([^,]+,[^,]+%)]]) then
-												local pos = key_line.text:find("}")
-												key_line.text = key_line.text:sub(1,pos-1)..[[\org]]..key_line.text:match([[\pos(%([^%)]-%))]])..key_line.text:sub(pos)
-											end
-											key_line.effect = "beretag!"..key_line.effect:sub(9)
-											--处理bere行
-											if sub[bere].effect:find("^beretag@") then
-												local line = sub[bere]
-												line.effect = ":"..line.effect
-												line.comment = true
-												sub[bere] = line
-											else
-												local line = sub[bere]
-												line.comment = true
-												sub[bere] = line
-											end
-											--处理keytext内容
-											local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
-											local time_start, step_num, time_end = key_line.start_time, 1
-											if time_start<=0 then time_start = -400/fps end
-											local key_text_table_pos = 2
-											while key_text_table[key_text_table_pos]~=[[	Frame	X pixels	Y pixels	Z pixels]] do
-												key_text_table_pos=key_text_table_pos+1
-											end
-											key_text_table_pos=key_text_table_pos+1
 
-											local key_pos, key_scale, key_rot = {},{},{}
-											while key_text_table[key_text_table_pos]~="Scale" do--read Position
-												table.insert(key_pos,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
-												key_text_table_pos=key_text_table_pos+1
-											end
-											key_text_table_pos=key_text_table_pos+2
-											while key_text_table[key_text_table_pos]~="Rotation" do--read Scale
-												table.insert(key_scale,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
-												key_text_table_pos=key_text_table_pos+1
-											end
-											key_text_table_pos=key_text_table_pos+2
-											while key_text_table[key_text_table_pos]~="End of Keyframe Data" do--read Rotation
-												table.insert(key_rot,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)")})
-												key_text_table_pos=key_text_table_pos+1
-											end
-											--处理keyclip内容
-											local key_clip_point_table = {}
-											if user_var.keyclip~="" and user_var.keyclip then
-												local key_clip_table = {}
-												for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table,line) end
+									if not key_text_table[1]=="Adobe After Effects 6.0 Keyframe Data" then
+										user_var.debug([[The $keytext "]]..tostring(key_text_table[1])..[[" is not supported]], true)
+									end
 
-												if key_clip_table[1]=="shake_shape_data 4.0" then
-													local height = select(1,karaskel.collect_head(user_var.sub)).res_y
-													for _,line in ipairs(key_clip_table) do
-														if line:sub(1,11)=="vertex_data" then
-															line=line:sub(13)
+									user_var.bere_line = bere
 
-															--坐标转换
-															local coords = {}
-															for x, y in string.gmatch(line, "([^ ]-) ([^ ]-) ") do
-																table.insert(coords, {tonumber(x), tonumber(y)})
-															end
-															for i, coord in ipairs(coords) do
-																coord[2] = height - coord[2]
-															end
-															line=""
-															for _, coord in ipairs(coords) do
-																line = line..string.format("%.2f %.2f ", coord[1], coord[2])
-															end
+									--补全tag
+									local key_line = user_var.deepCopy(user_var.this)
+									if not key_line.text:find("{.-}") then
+										key_line.text = "{}"..key_line.text
+									end
+									if not user_var.text:find([[\pos%([^,]-,[^,%)]-%)]]) then
+										local pos = key_line.text:find("}")
+										key_line.text = key_line.text:sub(1,pos-1)..string.format([[\pos(%.2f,%.2f)]], key_line.x, key_line.y)..key_line.text:sub(pos)
+									end
+									if not user_var.text:find([[\fscx%d]]) then
+										local pos = key_line.text:find("}")
+										key_line.text = key_line.text:sub(1,pos-1)..[[\fscx100]]..key_line.text:sub(pos)
+									end
+									if not user_var.text:find([[\fscy%d]]) then
+										local pos = key_line.text:find("}")
+										key_line.text = key_line.text:sub(1,pos-1)..[[\fscy100]]..key_line.text:sub(pos)
+									end
+									if not user_var.text:find([[\frz%-?%d]]) then
+										local pos = key_line.text:find("}")
+										key_line.text = key_line.text:sub(1,pos-1)..[[\frz0]]..key_line.text:sub(pos)
+									end
+									if not user_var.text:find([[\org%([^,]+,[^,]+%)]]) then
+										local pos = key_line.text:find("}")
+										key_line.text = key_line.text:sub(1,pos-1)..[[\org]]..key_line.text:match([[\pos(%([^%)]-%))]])..key_line.text:sub(pos)
+									end
+									key_line.effect = "beretag!"..key_line.effect:sub(9)
+									--处理bere行
+									if sub[bere].effect:find("^beretag@") then
+										local line = sub[bere]
+										line.effect = ":"..line.effect
+										line.comment = true
+										sub[bere] = line
+									else
+										local line = sub[bere]
+										line.comment = true
+										sub[bere] = line
+									end
+									--处理keytext内容
+									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
+									local time_start, step_num, time_end = key_line.start_time, 1
+									if time_start<=0 then time_start = -400/fps end
+									local key_text_table_pos = 2
+									while key_text_table[key_text_table_pos]~=[[	Frame	X pixels	Y pixels	Z pixels]] do
+										key_text_table_pos=key_text_table_pos+1
+									end
+									key_text_table_pos=key_text_table_pos+1
 
-															local _,pos2=line:find("^[^ ]- [^ ]- ")
-															table.insert(key_clip_point_table,
-																[[{\clip(m ]]..line:sub(0,pos2).."l"..line:sub(pos2)..")}")
-														end
+									local key_pos, key_scale, key_rot = {},{},{}
+									while key_text_table[key_text_table_pos]~="Scale" do--read Position
+										table.insert(key_pos,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
+										key_text_table_pos=key_text_table_pos+1
+									end
+									key_text_table_pos=key_text_table_pos+2
+									while key_text_table[key_text_table_pos]~="Rotation" do--read Scale
+										table.insert(key_scale,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
+										key_text_table_pos=key_text_table_pos+1
+									end
+									key_text_table_pos=key_text_table_pos+2
+									while key_text_table[key_text_table_pos]~="End of Keyframe Data" do--read Rotation
+										table.insert(key_rot,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)")})
+										key_text_table_pos=key_text_table_pos+1
+									end
+									--处理keyclip内容
+									local key_clip_point_table = {}
+									if user_var.keyclip~="" and user_var.keyclip then
+										local key_clip_table = {}
+										for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table,line) end
+
+										if key_clip_table[1]=="shake_shape_data 4.0" then
+											local height = select(1,karaskel.collect_head(user_var.sub)).res_y
+											for _,line in ipairs(key_clip_table) do
+												if line:sub(1,11)=="vertex_data" then
+													line=line:sub(13)
+
+													--坐标转换
+													local coords = {}
+													for x, y in string.gmatch(line, "([^ ]-) ([^ ]-) ") do
+														table.insert(coords, {tonumber(x), tonumber(y)})
 													end
-												else
-													user_var.debug([["]]..key_clip_table[1]..[[" is not supported]])
+													for i, coord in ipairs(coords) do
+														coord[2] = height - coord[2]
+													end
+													line=""
+													for _, coord in ipairs(coords) do
+														line = line..string.format("%.2f %.2f ", coord[1], coord[2])
+													end
+
+													local _,pos2=line:find("^[^ ]- [^ ]- ")
+													table.insert(key_clip_point_table,
+														[[{\clip(m ]]..line:sub(0,pos2).."l"..line:sub(pos2)..")}")
 												end
-											end
-											for i=#key_clip_point_table+1,#key_rot do
-												key_clip_point_table[i]=""
-											end
-											--开始插入行
-											local x,y,fx,fy,fz,ox,oy
-											local pos_table, out_value = {1,#key_line.text}, {}
-											
-											local pos1,pos2 = key_line.text:find([[\pos%([^,]-,]])
-											x = key_line.text:sub(pos1+5,pos2-1)
-											table.insert(out_value,{pos1,x,key_pos,1})
-											table.insert(pos_table,pos1+4) table.insert(pos_table,pos2)
-
-											pos1,pos2 = key_line.text:find([[,[^,]-%)]],pos2)
-											y = key_line.text:sub(pos1+1,pos2-1)
-											table.insert(out_value,{pos1,y,key_pos,2})
-											table.insert(pos_table,pos1) table.insert(pos_table,pos2)
-
-											pos1,pos2 = key_line.text:find([[\fscx[%d%.]+]])
-											fx = key_line.text:sub(pos1+5,pos2)
-											table.insert(out_value,{pos1,fx,key_scale,1})
-											table.insert(pos_table,pos1+4) table.insert(pos_table,pos2+1)
-
-											pos1,pos2 = key_line.text:find([[\fscy[%d%.]+]])
-											fy = key_line.text:sub(pos1+5,pos2)
-											table.insert(out_value,{pos1,fy,key_scale,2})
-											table.insert(pos_table,pos1+4) table.insert(pos_table,pos2+1)
-
-											pos1,pos2 = key_line.text:find([[\frz%-?[%d%.]+]])
-											fz = key_line.text:sub(pos1+4,pos2)
-											table.insert(out_value,{pos1,fz,key_rot,1})
-											table.insert(pos_table,pos1+3) table.insert(pos_table,pos2+1)
-											
-											pos1,pos2 = key_line.text:find([[\org%([^,]-,]])
-											ox = key_line.text:sub(pos1+5,pos2-1)
-											table.insert(out_value,{pos1,ox,key_pos,1})
-											table.insert(pos_table,pos1+4) table.insert(pos_table,pos2)
-
-											pos1,pos2 = key_line.text:find([[,[^,]-%)]],pos2)
-											oy = key_line.text:sub(pos1+1,pos2-1)
-											table.insert(out_value,{pos1,oy,key_pos,2})
-											table.insert(pos_table,pos1) table.insert(pos_table,pos2)
-											
-
-											table.sort(out_value, function(a,b) return a[1] < b[1] end) table.sort(pos_table)
-
-											local insert_key_line_table, insert_key_line = {
-												key_line.text:sub(pos_table[1],pos_table[2]),
-												key_line.text:sub(pos_table[3],pos_table[4]),
-												key_line.text:sub(pos_table[5],pos_table[6]),
-												key_line.text:sub(pos_table[7],pos_table[8]),
-												key_line.text:sub(pos_table[9],pos_table[10]),
-												key_line.text:sub(pos_table[11],pos_table[12]),
-												key_line.text:sub(pos_table[13],pos_table[14]),
-												key_line.text:sub(pos_table[15],pos_table[16])
-											}
-											--根据mode插入
-											local function key_line_value(num,i)
-												-- out_value[num][3][i][out_value[num][4]] keytext 当前行值
-												-- out_value[num][3][1][out_value[num][4]] keytext 第一行值
-												-- out_value[num][2] beretag 对应标签的值
-												local _char = insert_key_line_table[num]:sub(-1)
-												if _char=='x' or _char=='y' then
-													return
-														insert_key_line_table[num] ..
-														math.floor((out_value[num][2] * out_value[num][3][i][out_value[num][4]] / out_value[num][3][1][out_value[num][4]])*100+0.5)/100
-												elseif _char=='z' then
-													return
-														insert_key_line_table[num] ..
-														math.floor((out_value[num][2] - out_value[num][3][i][out_value[num][4]] + out_value[num][3][1][out_value[num][4]])*100+0.5)/100
-												else
-													return
-														insert_key_line_table[num] ..
-														math.floor((out_value[num][2] + out_value[num][3][i][out_value[num][4]] - out_value[num][3][1][out_value[num][4]])*100+0.5)/100
-												end
-											end
-											time_end = time_start
-											local key_rot_len = #key_rot
-											if mode.append then
-												for i=1,key_rot_len do
-													insert_key_line = key_line
-													insert_key_line.text =
-														key_clip_point_table[i] ..
-														key_line_value(1,i) ..
-														key_line_value(2,i) ..
-														key_line_value(3,i) ..
-														key_line_value(4,i) ..
-														key_line_value(5,i) ..
-														key_line_value(6,i) ..
-														key_line_value(7,i) ..
-														insert_key_line_table[8]
-
-													insert_key_line.start_time = time_end
-													time_end = time_start + step_num*1000/fps
-													insert_key_line.end_time = time_end
-													step_num = step_num+1
-
-													user_var.keyProc(insert_key_line, {i,key_rot_len})
-													sub[0] = insert_key_line
-												end
-											else
-												local insert_pos = bere+1
-												for i=1,key_rot_len do
-													insert_key_line = key_line
-													insert_key_line.text =
-														key_clip_point_table[i] ..
-														key_line_value(1,i) ..
-														key_line_value(2,i) ..
-														key_line_value(3,i) ..
-														key_line_value(4,i) ..
-														key_line_value(5,i) ..
-														key_line_value(6,i) ..
-														key_line_value(7,i) ..
-														insert_key_line_table[8]
-
-													insert_key_line.start_time = time_end
-													time_end = time_start + step_num*1000/fps
-													insert_key_line.end_time = time_end
-													step_num = step_num+1
-
-													user_var.keyProc(insert_key_line, {i,key_rot_len})
-													sub.insert(insert_pos,insert_key_line)
-													insert_pos = insert_pos+1
-												end
-												find_end = find_end + insert_pos - bere - 1
-												bere = insert_pos - 1
 											end
 										else
-											user_var.debug([[The $keytext "]]..tostring(key_text_table[1])..[[" is not supported]], true)
+											user_var.debug([["]]..key_clip_table[1]..[[" is not supported]])
+										end
+									end
+									for i=#key_clip_point_table+1,#key_rot do
+										key_clip_point_table[i]=""
+									end
+									--开始插入行
+									local x,y,fx,fy,fz,ox,oy
+									local pos_table, out_value = {1,#key_line.text}, {}
+									
+									local pos1,pos2 = key_line.text:find([[\pos%([^,]-,]])
+									x = key_line.text:sub(pos1+5,pos2-1)
+									table.insert(out_value,{pos1,x,key_pos,1})
+									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2)
+
+									pos1,pos2 = key_line.text:find([[,[^,]-%)]],pos2)
+									y = key_line.text:sub(pos1+1,pos2-1)
+									table.insert(out_value,{pos1,y,key_pos,2})
+									table.insert(pos_table,pos1) table.insert(pos_table,pos2)
+
+									pos1,pos2 = key_line.text:find([[\fscx[%d%.]+]])
+									fx = key_line.text:sub(pos1+5,pos2)
+									table.insert(out_value,{pos1,fx,key_scale,1})
+									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2+1)
+
+									pos1,pos2 = key_line.text:find([[\fscy[%d%.]+]])
+									fy = key_line.text:sub(pos1+5,pos2)
+									table.insert(out_value,{pos1,fy,key_scale,2})
+									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2+1)
+
+									pos1,pos2 = key_line.text:find([[\frz%-?[%d%.]+]])
+									fz = key_line.text:sub(pos1+4,pos2)
+									table.insert(out_value,{pos1,fz,key_rot,1})
+									table.insert(pos_table,pos1+3) table.insert(pos_table,pos2+1)
+									
+									pos1,pos2 = key_line.text:find([[\org%([^,]-,]])
+									ox = key_line.text:sub(pos1+5,pos2-1)
+									table.insert(out_value,{pos1,ox,key_pos,1})
+									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2)
+
+									pos1,pos2 = key_line.text:find([[,[^,]-%)]],pos2)
+									oy = key_line.text:sub(pos1+1,pos2-1)
+									table.insert(out_value,{pos1,oy,key_pos,2})
+									table.insert(pos_table,pos1) table.insert(pos_table,pos2)
+									
+
+									table.sort(out_value, function(a,b) return a[1] < b[1] end) table.sort(pos_table)
+
+									local insert_key_line_table, insert_key_line = {
+										key_line.text:sub(pos_table[1],pos_table[2]),
+										key_line.text:sub(pos_table[3],pos_table[4]),
+										key_line.text:sub(pos_table[5],pos_table[6]),
+										key_line.text:sub(pos_table[7],pos_table[8]),
+										key_line.text:sub(pos_table[9],pos_table[10]),
+										key_line.text:sub(pos_table[11],pos_table[12]),
+										key_line.text:sub(pos_table[13],pos_table[14]),
+										key_line.text:sub(pos_table[15],pos_table[16])
+									}
+									--根据mode插入
+									local function key_line_value(num,i)
+										-- out_value[num][3][i][out_value[num][4]] keytext 当前行值
+										-- out_value[num][3][1][out_value[num][4]] keytext 第一行值
+										-- out_value[num][2] beretag 对应标签的值
+										local _char = insert_key_line_table[num]:sub(-1)
+										if _char=='x' or _char=='y' then
+											return
+												insert_key_line_table[num] ..
+												math.floor((out_value[num][2] * out_value[num][3][i][out_value[num][4]] / out_value[num][3][1][out_value[num][4]])*100+0.5)/100
+										elseif _char=='z' then
+											return
+												insert_key_line_table[num] ..
+												math.floor((out_value[num][2] - out_value[num][3][i][out_value[num][4]] + out_value[num][3][1][out_value[num][4]])*100+0.5)/100
+										else
+											return
+												insert_key_line_table[num] ..
+												math.floor((out_value[num][2] + out_value[num][3][i][out_value[num][4]] - out_value[num][3][1][out_value[num][4]])*100+0.5)/100
+										end
+									end
+									time_end = time_start
+									local key_rot_len = #key_rot
+									if mode.append then
+										for i=1,key_rot_len do
+											insert_key_line = key_line
+											insert_key_line.text =
+												key_clip_point_table[i] ..
+												key_line_value(1,i) ..
+												key_line_value(2,i) ..
+												key_line_value(3,i) ..
+												key_line_value(4,i) ..
+												key_line_value(5,i) ..
+												key_line_value(6,i) ..
+												key_line_value(7,i) ..
+												insert_key_line_table[8]
+
+											insert_key_line.start_time = time_end
+											time_end = time_start + step_num*1000/fps
+											insert_key_line.end_time = time_end
+											step_num = step_num+1
+
+											user_var.keyProc(insert_key_line, {i,key_rot_len})
+											sub[0] = insert_key_line
 										end
 									else
-										user_var.debug(tr[["\pos" not found]], true)
+										local insert_pos = bere+1
+										for i=1,key_rot_len do
+											insert_key_line = key_line
+											insert_key_line.text =
+												key_clip_point_table[i] ..
+												key_line_value(1,i) ..
+												key_line_value(2,i) ..
+												key_line_value(3,i) ..
+												key_line_value(4,i) ..
+												key_line_value(5,i) ..
+												key_line_value(6,i) ..
+												key_line_value(7,i) ..
+												insert_key_line_table[8]
+
+											insert_key_line.start_time = time_end
+											time_end = time_start + step_num*1000/fps
+											insert_key_line.end_time = time_end
+											step_num = step_num+1
+
+											user_var.keyProc(insert_key_line, {i,key_rot_len})
+											sub.insert(insert_pos,insert_key_line)
+											insert_pos = insert_pos+1
+										end
+										find_end = find_end + insert_pos - bere - 1
+										bere = insert_pos - 1
 									end
+								
 								end
 							end
 							--next
@@ -1486,7 +1572,10 @@ local function do_macro(sub)
 			end
 			append_num=0--还原append边界
 		end
-		user_var.temp_line=user_var.temp_line+1
+		user_var.temp_line = user_var.temp_line + 1
+		user_var.bere_line = false
+		user_var.bere_text = ""
+		user_var.bere_match = {}
 	end
 
 	--删除所有空的 beretag! 行

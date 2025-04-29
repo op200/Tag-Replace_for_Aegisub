@@ -13,7 +13,8 @@
         "undefined-global",
         "redundant-parameter",
         "param-type-mismatch",
-        "need-check-nil"
+        "need-check-nil",
+        "assign-type-mismatch"
     ],
     "editor.tabSize": 3
 }
