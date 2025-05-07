@@ -167,6 +167,8 @@ Tag Replace 的操作规范中，局部变量同 Lua 语法，全局变量使用
   classmix 模式的后处理函数
 
 行处理
+* \$rePreLine(line, tags: str | nil) -> nil  
+  重新根据头部的 ASS 样式标签执行 karakel 预处理
 * \$gradient(line, callback, step, pos) -> nil  
   @param line  
 	@param callback: function(line, position: dict, progress: list) -> nil  
@@ -182,6 +184,8 @@ Tag Replace 的操作规范中，局部变量同 Lua 语法，全局变量使用
 * \$getTagCut(text: str)  
   输入一个字符串，返回按 tag 的出现顺序切割成的 table `{{text: str, is_tag: bool, num: int}, ...}`  
   e.g. `$getTagCut("1{22}333{}{}")` -> `{{"1", false, 1}, {"{22}", true, 1}, {"333", false, 2}, {"{}", true, 2}, {"{}", true, 3}}`
+* \$posLine(line, width: number | nil) -> nil  
+  生成定位线
 
 调用外部
 * \$cmdCode(cmd: str, popen: bool)

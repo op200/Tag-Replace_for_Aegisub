@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.5.5"
+script_version = "2.5.6"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -171,22 +171,18 @@ user_var={
 
 	--行处理
 
-	-- @param line  
-	-- @param callback: function(line, position: dict, progress: list) -> nil  
-	-- 　@position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r}  
-	-- 　@progress: {x_fraction: list, y_fraction, x_percent: number, y_percent}  
-	-- @param step: list | nil  
-	-- 　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
-	-- 　　expand: list{number | nil} = {left, top, right, bottom}  
-	-- @param pos: list | nil  
-	-- 　{x: number | nil, y: number | nil}  
-	-- @return nil, insert subcache
-	gradient=function(line, callback, step, pos)
+	-- @param line
+	-- @param tags: string | nil
+	-- @return nil
+	rePreLine=function(line, tags)
 		local meta, styles = karaskel.collect_head(user_var.sub)
 		local style = styles[line.style]
 
-		-- 根据头部 {} 中的 \pos \an? \fs[+-]? \fsp \fsc[xy] \[xy]?bord \[xy]?shad 标签重计算位置, pos 不是 style 中的, 放最后单独计算
-		local tags = line.text:gsub("}{", ""):match("^{(.-)}") or ""
+		tags = tags or line.text:gsub("}{", ""):match("^{(.-)}") or ""
+
+		for fn in tags:gmatch("\\fn([^}\\]+)") do -- \fn
+			style.fontname = fn
+		end
 
 		for n, a in tags:gmatch("\\a(n?)(%d+)") do -- \an?
 			if n == 'n' then
@@ -222,6 +218,27 @@ user_var={
 
 		karaskel.preproc_line_size(meta, styles, line)
 		karaskel.preproc_line_pos(meta, styles, line)
+	end,
+	-- @param line  
+	-- @param callback: function(line, position: dict, progress: list) -> nil  
+	-- 　@position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r}  
+	-- 　@progress: {x_fraction: list, y_fraction, x_percent: number, y_percent}  
+	-- @param step: list | nil  
+	-- 　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
+	-- 　　expand: list{number | nil} = {left, top, right, bottom}  
+	-- @param pos: list | nil  
+	-- 　{x: number | nil, y: number | nil}  
+	-- @return nil, insert subcache
+	gradient=function(line, callback, step, pos)
+		line = user_var.deepCopy(line)
+
+		local meta, styles = karaskel.collect_head(user_var.sub)
+		local style = styles[line.style]
+
+		-- 根据头部 {} 中的 \pos \fn \an? \fs[+-]? \fsp \fsc[xy] \[xy]?bord \[xy]?shad 标签重计算位置, pos 不是 style 中的, 放最后单独计算
+		local tags = line.text:gsub("}{", ""):match("^{(.-)}") or ""
+
+		user_var.rePreLine(line, tags)
 
 		-- \[xy]?bord
 		local bord = {style.outline, style.outline}
@@ -462,6 +479,70 @@ user_var={
 
 		return result
 	end,
+	-- @param line
+	-- @param width: number | nil
+	posLine=function(line, width)
+		line = user_var.deepCopy(line)
+
+		user_var.rePreLine(line)
+		width = width or 1
+
+		local xres, yres = aegisub.video_size()
+		xres, yres = (xres or 1920) * 10, (yres or 1080) * 10
+		local pos_tag = {line.text:match("\\pos%(([^,]-),([^%)]-)%)")}
+		local x, y = pos_tag[1] or line.x, pos_tag[2] or line.y
+		local offset_x, offset_y = x - line.x, y - line.y
+		local l, r, t, b = line.left, line.right - line.styleref.spacing * 2, line.top, line.bottom
+		l, r, t, b = l + offset_x, r + offset_x, t + offset_y, b + offset_y
+
+		local line_line = user_var.deepCopy(line)
+
+		-- top bottom
+		local top_bottom = string.format(
+			[[{\an\pos(%s,pos_y)\bord0\shad0\c&H0000FF&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]],
+			x,
+			width,
+			xres, width,
+			xres)
+		line_line.text = top_bottom:gsub([[\an]], [[\an2]]):gsub("pos_y", t)
+		user_var.addLine(line_line)
+		line_line.text = top_bottom:gsub([[\an]], [[\an8]]):gsub("pos_y", b)
+		user_var.addLine(line_line)
+
+		-- left right
+		local left_right = string.format(
+			[[{\an\pos(pos_x,%s)\bord0\shad0\c&H00FF00&\1a&H80&\p1}m 0 0 l %d 0 %d %d 0 %d]],
+			y,
+			width,
+			width, yres,
+			yres)
+		line_line.text = left_right:gsub([[\an]], [[\an6]]):gsub("pos_x", l)
+		user_var.addLine(line_line)
+		line_line.text = left_right:gsub([[\an]], [[\an4]]):gsub("pos_x", r)
+		user_var.addLine(line_line)
+
+		-- descent ext_lead
+		local _, _, descent, ext_lead = aegisub.text_extents(line.styleref, "")
+		descent, ext_lead = tonumber(descent), tonumber(ext_lead)
+		local descent_extlead = string.format(
+			[[{\an\pos(%s,pos_y)\bord0\shad0\&HFF0000&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]],
+			x,
+			width,
+			xres, width,
+			xres)
+		if descent ~= 0 then
+			line_line.text = descent_extlead:gsub([[\an]], [[\an2]]):gsub("pos_y", t + descent)
+			user_var.addLine(line_line)
+			line_line.text = descent_extlead:gsub([[\an]], [[\an8]]):gsub("pos_y", b - descent)
+			user_var.addLine(line_line)
+		end
+		if ext_lead ~= 0 then
+			line_line.text = descent_extlead:gsub([[\an]], [[\an2]]):gsub("pos_y", t - ext_lead)
+			user_var.addLine(line_line)
+			line_line.text = descent_extlead:gsub([[\an]], [[\an8]]):gsub("pos_y", b + ext_lead)
+			user_var.addLine(line_line)
+		end
+	end,
 
 	--外部
 
@@ -638,7 +719,7 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 	end
 	--扩展变量
 	while true do
-		pos1, pos2 = text:find("%$[%w_%[%]]+")
+		pos1, pos2 = text:find("%$[%w_%[%]%.\"%-%+%*/%%]+")
 		if not pos1 then break end
 		local var = text:sub(pos1+1,pos2)
 		if var~="" then--扩展预留关键词
