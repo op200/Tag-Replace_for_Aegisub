@@ -1,4 +1,9 @@
 {
+    "[lua]": {
+        "editor.formatOnSave": false,
+        "editor.formatOnType": false,
+        "editor.defaultFormatter": null
+    },
     "Lua.diagnostics.globals": [
         "script_description",
         "aegisub",
