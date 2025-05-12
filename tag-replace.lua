@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.6.0"
+script_version = "2.6.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -1291,42 +1291,110 @@ local function do_macro(sub, begin)
 							if not sub[bere].comment and sub[bere].effect:find("^beretag[@!]")
 								and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass) 
 								and (not mode.strictactor or sub[user_var.temp_line].actor==sub[bere].actor)
-								and (not mode.strictstyle or sub[user_var.temp_line].style==sub[bere].style) then
+								and (not mode.strictstyle or sub[user_var.temp_line].style==sub[bere].style)
+								then
+
+								local insert_key_line
+
+								-- 替换 \fade? 和 \t
+
+								local function gsub_callback_tag_fad(match)
+									local t1, t2 = match:match("%(([^,]+),([^%)]+)%)")
+									t1, t2 = math.floor(tonumber(t1)), math.floor(tonumber(t2))
+
+									local duration = math.floor(user_var.end_time - user_var.start_time)
+									local t = insert_key_line.start_time - user_var.start_time
+									if t < t1 or t > duration - t2 then
+										return string.format([[\fade(%d,%d,%d,%d,%d,%d,%d)]],
+											255, 0, 255,
+											0, t1,
+											duration - tonumber(t2), duration)
+									else
+										return ""
+									end
+								end
+
+								local function gsub_callback_tag_fade(match)
+									-- \fade(<a1>,<a2>,<a3>,<t1>,<t2>,<t3>,<t4>)
+									local vals = {}
+									for s in (match:match([[^\fade%((.+)%)$]]) or ""):gmatch("[^,]+") do
+										table.insert(vals, math.floor(s))
+									end
+									if #vals ~= 7 then
+										user_var.debug(string.format([[Wrong \fade in %d]], user_var.num), true)
+									end
+
+									local offset = math.floor(user_var.start_time - insert_key_line.start_time)
+									return string.format([[\fade(%d,%d,%d,%d,%d,%d,%d)]],
+										vals[1], vals[2], vals[3],
+										vals[4] + offset, vals[5] + offset,
+										vals[6] + offset, vals[7] + offset)
+								end
+
+								local function gsub_callback_tag_t(match)
+									local vals = {}
+									for s in (match:match([[^\t%(([^\]+).+%)$]]) or ""):gmatch("[^,]+") do
+										table.insert(vals, s)
+									end
+									if #vals == 0 then
+										vals[1] = 0
+										vals[2] = user_var.end_time - user_var.start_time
+										vals[3] = 1
+									elseif #vals == 1 then -- 加速度
+										vals[3] = vals[1]
+										vals[1] = 0
+										vals[2] = user_var.end_time - user_var.start_time
+									elseif #vals == 2 then -- 时间
+										vals[3] = 1
+									end
+
+									vals[4] = match:match([[^\t%([^\]*(.+)%)$]])
+									if not vals[4] or #vals > 4 then
+										user_var.debug(string.format([[Wrong \t in %d]], user_var.num), true)
+									end
+
+									local offset = user_var.start_time - insert_key_line.start_time
+									return string.format([[\t(%d,%d,%s,%s)]],
+										vals[1] + offset,
+										vals[2] + offset,
+										vals[3], vals[4])
+								end
 
 								if (user_var.keytext=="" or not user_var.keytext)
 									and user_var.keyclip~="" and user_var.keyclip
-									then--只有clip的情况
+									then -- 只有clip的情况
+
 									--处理keyclip内容
 									local key_clip_point_table = {}
 									local key_clip_table = {}
 									for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table,line) end
 
-									if key_clip_table[1]=="shake_shape_data 4.0" then
-										local height = select(1,karaskel.collect_head(user_var.sub)).res_y
-										for _,line in ipairs(key_clip_table) do
-											if line:sub(1,11)=="vertex_data" then
-												line=line:sub(13)
-	
-												--坐标转换
-												local coords = {}
-												for x, y in string.gmatch(line, "([^ ]-) ([^ ]-) ") do
-													table.insert(coords, {tonumber(x), tonumber(y)})
-												end
-												for i, coord in ipairs(coords) do
-													coord[2] = height - coord[2]
-												end
-												line=""
-												for _, coord in ipairs(coords) do
-													line = line..string.format("%.2f %.2f ", coord[1], coord[2])
-												end
-
-												local _,pos2=line:find("^[^ ]- [^ ]- ")
-												table.insert(key_clip_point_table,
-													[[{\clip(m ]]..line:sub(0,pos2).."l"..line:sub(pos2)..")}")
-											end
-										end
-									else
+									if key_clip_table[1] ~= "shake_shape_data 4.0" then
 										user_var.debug([[The $keyclip "]]..tostring(key_clip_table[1])..[[" is not supported]])
+									end
+
+									local height = select(1,karaskel.collect_head(user_var.sub)).res_y
+									for _,line in ipairs(key_clip_table) do
+										if line:sub(1,11)=="vertex_data" then
+											line=line:sub(13)
+
+											--坐标转换
+											local coords = {}
+											for x, y in string.gmatch(line, "([^ ]-) ([^ ]-) ") do
+												table.insert(coords, {tonumber(x), tonumber(y)})
+											end
+											for i, coord in ipairs(coords) do
+												coord[2] = height - coord[2]
+											end
+											line=""
+											for _, coord in ipairs(coords) do
+												line = line..string.format("%.2f %.2f ", coord[1], coord[2])
+											end
+
+											local _,pos2=line:find("^[^ ]- [^ ]- ")
+											table.insert(key_clip_point_table,
+												[[{\clip(m ]]..line:sub(0,pos2).."l"..line:sub(pos2)..")}")
+										end
 									end
 
 									local key_line = sub[bere]
@@ -1337,7 +1405,7 @@ local function do_macro(sub, begin)
 									local key_clip_point_table_len = #key_clip_point_table
 									if mode.append then
 										for i=1,key_clip_point_table_len do
-											local insert_key_line = key_line
+											insert_key_line = key_line
 											insert_key_line.text = key_clip_point_table[i] .. insert_key_line.text
 
 											insert_key_line.start_time = time_end
@@ -1345,53 +1413,10 @@ local function do_macro(sub, begin)
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
 
-											-- 替换 \fad 和 \t
 											insert_key_line.text = insert_key_line.text
-												:gsub([[\fad%([^%)]*%)]], function(match)
-													local num1, num2 = match:match("%(([^,]+),([^%)]+)%)")
-													num1, num2 = tonumber(num1), tonumber(num2)
-													local sf, ef = user_var.ms2f(insert_key_line.start_time), user_var.ms2f(insert_key_line.end_time)
-													local f1, f2 = user_var.ms2f(user_var.start_time + num1), user_var.ms2f(user_var.end_time - num2) + 1
-													if sf < f1 then
-														return string.format(
-															[[\alpha%X]],
-															255 * (f1 - sf) / (f1 - user_var.start_frame))
-													elseif ef > f2 then
-														return string.format(
-															[[\alpha%X]],
-															255 * (ef - f2) / (user_var.end_frame - f2))
-													else
-														return ""
-													end
-												end)
-												:gsub([[\t%([^%)]*%)]], function(match)
-													local vals = {}
-													for s in (match:match([[^\t%(([^\]+).+%)$]]) or ""):gmatch("[^,]+") do
-														table.insert(vals, s)
-													end
-													if #vals == 0 then
-														vals[1] = 0
-														vals[2] = user_var.end_time - user_var.start_time
-														vals[3] = 1
-													elseif #vals == 1 then -- 加速度
-														vals[3] = vals[1]
-														vals[1] = 0
-														vals[2] = user_var.end_time - user_var.start_time
-													elseif #vals == 2 then -- 时间
-														vals[3] = 1
-													end
-
-													vals[4] = match:match([[^\t%([^\]*(.+)%)$]])
-													if not vals[4] or #vals > 4 then
-														user_var.debug(string.format([[Wrong \t in %d]], user_var.num), true)
-													end
-
-													local offset = user_var.start_time - insert_key_line.start_time
-													return string.format([[\t(%d,%d,%s,%s)]],
-														vals[1] + offset,
-														vals[2] + offset,
-														vals[3], vals[4])
-												end)
+												:gsub([[\fad%([^%)]+%)]], gsub_callback_tag_fad)
+												:gsub([[\fade%([^%)]+%)]], gsub_callback_tag_fade)
+												:gsub([[\t%([^%)]+%)]], gsub_callback_tag_t)
 
 											user_var.keyProc(insert_key_line, {i,key_clip_point_table_len})
 											sub[0] = insert_key_line
@@ -1407,53 +1432,10 @@ local function do_macro(sub, begin)
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
 
-											-- 替换 \fad 和 \t
 											insert_key_line.text = insert_key_line.text
-												:gsub([[\fad%([^%)]*%)]], function(match)
-													local num1, num2 = match:match("%(([^,]+),([^%)]+)%)")
-													num1, num2 = tonumber(num1), tonumber(num2)
-													local sf, ef = user_var.ms2f(insert_key_line.start_time), user_var.ms2f(insert_key_line.end_time)
-													local f1, f2 = user_var.ms2f(user_var.start_time + num1), user_var.ms2f(user_var.end_time - num2) + 1
-													if sf < f1 then
-														return string.format(
-															[[\alpha%X]],
-															255 * (f1 - sf) / (f1 - user_var.start_frame))
-													elseif ef > f2 then
-														return string.format(
-															[[\alpha%X]],
-															255 * (ef - f2) / (user_var.end_frame - f2))
-													else
-														return ""
-													end
-												end)
-												:gsub([[\t%([^%)]*%)]], function(match)
-													local vals = {}
-													for s in (match:match([[^\t%(([^\]+).+%)$]]) or ""):gmatch("[^,]+") do
-														table.insert(vals, s)
-													end
-													if #vals == 0 then
-														vals[1] = 0
-														vals[2] = user_var.end_time - user_var.start_time
-														vals[3] = 1
-													elseif #vals == 1 then -- 加速度
-														vals[3] = vals[1]
-														vals[1] = 0
-														vals[2] = user_var.end_time - user_var.start_time
-													elseif #vals == 2 then -- 时间
-														vals[3] = 1
-													end
-
-													vals[4] = match:match([[^\t%([^\]*(.+)%)$]])
-													if not vals[4] or #vals > 4 then
-														user_var.debug(string.format([[Wrong \t in %d]], user_var.num), true)
-													end
-
-													local offset = user_var.start_time - insert_key_line.start_time
-													return string.format([[\t(%d,%d,%s,%s)]],
-														vals[1] + offset,
-														vals[2] + offset,
-														vals[3], vals[4])
-												end)
+												:gsub([[\fad%([^%)]+%)]], gsub_callback_tag_fad)
+												:gsub([[\fade%([^%)]+%)]], gsub_callback_tag_fade)
+												:gsub([[\t%([^%)]+%)]], gsub_callback_tag_t)
 
 											user_var.keyProc(insert_key_line, {i,key_clip_point_table_len})
 											sub.insert(insert_pos,insert_key_line)
@@ -1465,7 +1447,7 @@ local function do_macro(sub, begin)
 
 								else
 
-									if not key_text_table[1]=="Adobe After Effects 6.0 Keyframe Data" then
+									if key_text_table[1] ~= "Adobe After Effects 6.0 Keyframe Data" then
 										user_var.debug([[The $keytext "]]..tostring(key_text_table[1])..[[" is not supported]], true)
 									end
 
@@ -1539,32 +1521,32 @@ local function do_macro(sub, begin)
 										local key_clip_table = {}
 										for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table,line) end
 
-										if key_clip_table[1]=="shake_shape_data 4.0" then
-											local height = select(1,karaskel.collect_head(user_var.sub)).res_y
-											for _,line in ipairs(key_clip_table) do
-												if line:sub(1,11)=="vertex_data" then
-													line=line:sub(13)
-
-													--坐标转换
-													local coords = {}
-													for x, y in string.gmatch(line, "([^ ]-) ([^ ]-) ") do
-														table.insert(coords, {tonumber(x), tonumber(y)})
-													end
-													for i, coord in ipairs(coords) do
-														coord[2] = height - coord[2]
-													end
-													line=""
-													for _, coord in ipairs(coords) do
-														line = line..string.format("%.2f %.2f ", coord[1], coord[2])
-													end
-
-													local _,pos2=line:find("^[^ ]- [^ ]- ")
-													table.insert(key_clip_point_table,
-														[[{\clip(m ]]..line:sub(0,pos2).."l"..line:sub(pos2)..")}")
-												end
-											end
-										else
+										if key_clip_table[1] ~= "shake_shape_data 4.0" then
 											user_var.debug([["]]..key_clip_table[1]..[[" is not supported]])
+										end
+
+										local height = select(1,karaskel.collect_head(user_var.sub)).res_y
+										for _,line in ipairs(key_clip_table) do
+											if line:sub(1,11)=="vertex_data" then
+												line=line:sub(13)
+
+												--坐标转换
+												local coords = {}
+												for x, y in string.gmatch(line, "([^ ]-) ([^ ]-) ") do
+													table.insert(coords, {tonumber(x), tonumber(y)})
+												end
+												for i, coord in ipairs(coords) do
+													coord[2] = height - coord[2]
+												end
+												line=""
+												for _, coord in ipairs(coords) do
+													line = line..string.format("%.2f %.2f ", coord[1], coord[2])
+												end
+
+												local _,pos2=line:find("^[^ ]- [^ ]- ")
+												table.insert(key_clip_point_table,
+													[[{\clip(m ]]..line:sub(0,pos2).."l"..line:sub(pos2)..")}")
+											end
 										end
 									end
 									for i=#key_clip_point_table+1,#key_rot do
@@ -1612,7 +1594,7 @@ local function do_macro(sub, begin)
 
 									table.sort(out_value, function(a,b) return a[1] < b[1] end) table.sort(pos_table)
 
-									local insert_key_line_table, insert_key_line = {
+									local insert_key_line_table = {
 										key_line.text:sub(pos_table[1],pos_table[2]),
 										key_line.text:sub(pos_table[3],pos_table[4]),
 										key_line.text:sub(pos_table[5],pos_table[6]),
@@ -1642,6 +1624,7 @@ local function do_macro(sub, begin)
 												math.floor((out_value[num][2] + out_value[num][3][i][out_value[num][4]] - out_value[num][3][1][out_value[num][4]])*100+0.5)/100
 										end
 									end
+
 									time_end = time_start
 									local key_rot_len = #key_rot
 									if mode.append then
@@ -1663,53 +1646,10 @@ local function do_macro(sub, begin)
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
 
-											-- 替换 \fad 和 \t
 											insert_key_line.text = insert_key_line.text
-												:gsub([[\fad%([^%)]*%)]], function(match)
-													local num1, num2 = match:match("%(([^,]+),([^%)]+)%)")
-													num1, num2 = tonumber(num1), tonumber(num2)
-													local sf, ef = user_var.ms2f(insert_key_line.start_time), user_var.ms2f(insert_key_line.end_time)
-													local f1, f2 = user_var.ms2f(user_var.start_time + num1), user_var.ms2f(user_var.end_time - num2) + 1
-													if sf < f1 then
-														return string.format(
-															[[\alpha%X]],
-															255 * (f1 - sf) / (f1 - user_var.start_frame))
-													elseif ef > f2 then
-														return string.format(
-															[[\alpha%X]],
-															255 * (ef - f2) / (user_var.end_frame - f2))
-													else
-														return ""
-													end
-												end)
-												:gsub([[\t%([^%)]*%)]], function(match)
-													local vals = {}
-													for s in (match:match([[^\t%(([^\]+).+%)$]]) or ""):gmatch("[^,]+") do
-														table.insert(vals, s)
-													end
-													if #vals == 0 then
-														vals[1] = 0
-														vals[2] = user_var.end_time - user_var.start_time
-														vals[3] = 1
-													elseif #vals == 1 then -- 加速度
-														vals[3] = vals[1]
-														vals[1] = 0
-														vals[2] = user_var.end_time - user_var.start_time
-													elseif #vals == 2 then -- 时间
-														vals[3] = 1
-													end
-
-													vals[4] = match:match([[^\t%([^\]*(.+)%)$]])
-													if not vals[4] or #vals > 4 then
-														user_var.debug(string.format([[Wrong \t in %d]], user_var.num), true)
-													end
-
-													local offset = user_var.start_time - insert_key_line.start_time
-													return string.format([[\t(%d,%d,%s,%s)]],
-														vals[1] + offset,
-														vals[2] + offset,
-														vals[3], vals[4])
-												end)
+												:gsub([[\fad%([^%)]+%)]], gsub_callback_tag_fad)
+												:gsub([[\fade%([^%)]+%)]], gsub_callback_tag_fade)
+												:gsub([[\t%([^%)]+%)]], gsub_callback_tag_t)
 
 											user_var.keyProc(insert_key_line, {i,key_rot_len})
 											sub[0] = insert_key_line
@@ -1734,53 +1674,10 @@ local function do_macro(sub, begin)
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
 
-											-- 替换 \fad 和 \t
 											insert_key_line.text = insert_key_line.text
-												:gsub([[\fad%([^%)]*%)]], function(match)
-													local num1, num2 = match:match("%(([^,]+),([^%)]+)%)")
-													num1, num2 = tonumber(num1), tonumber(num2)
-													local sf, ef = user_var.ms2f(insert_key_line.start_time), user_var.ms2f(insert_key_line.end_time)
-													local f1, f2 = user_var.ms2f(user_var.start_time + num1), user_var.ms2f(user_var.end_time - num2) + 1
-													if sf < f1 then
-														return string.format(
-															[[\alpha%X]],
-															255 * (f1 - sf) / (f1 - user_var.start_frame))
-													elseif ef > f2 then
-														return string.format(
-															[[\alpha%X]],
-															255 * (ef - f2) / (user_var.end_frame - f2))
-													else
-														return ""
-													end
-												end)
-												:gsub([[\t%([^%)]*%)]], function(match)
-													local vals = {}
-													for s in (match:match([[^\t%(([^\]+).+%)$]]) or ""):gmatch("[^,]+") do
-														table.insert(vals, s)
-													end
-													if #vals == 0 then
-														vals[1] = 0
-														vals[2] = user_var.end_time - user_var.start_time
-														vals[3] = 1
-													elseif #vals == 1 then -- 加速度
-														vals[3] = vals[1]
-														vals[1] = 0
-														vals[2] = user_var.end_time - user_var.start_time
-													elseif #vals == 2 then -- 时间
-														vals[3] = 1
-													end
-
-													vals[4] = match:match([[^\t%([^\]*(.+)%)$]])
-													if not vals[4] or #vals > 4 then
-														user_var.debug(string.format([[Wrong \t in %d]], user_var.num), true)
-													end
-
-													local offset = user_var.start_time - insert_key_line.start_time
-													return string.format([[\t(%d,%d,%s,%s)]],
-														vals[1] + offset,
-														vals[2] + offset,
-														vals[3], vals[4])
-												end)
+												:gsub([[\fad%([^%)]+%)]], gsub_callback_tag_fad)
+												:gsub([[\fade%([^%)]+%)]], gsub_callback_tag_fade)
+												:gsub([[\t%([^%)]+%)]], gsub_callback_tag_t)
 
 											user_var.keyProc(insert_key_line, {i,key_rot_len})
 											sub.insert(insert_pos,insert_key_line)
@@ -1840,7 +1737,9 @@ local function do_macro(sub, begin)
 				end
 			end
 		--检索命令行
-			if sub[user_var.temp_line].effect:find("^template#") then
+			if sub[user_var.temp_line].effect:find("^template#")
+				and not get_mode(sub[user_var.temp_line].effect).pre
+				then
 				var_expansion(sub[user_var.temp_line].text, 2, sub)
 				if #user_var.subcache > 0 then--插入缓存行
 					local mode = get_mode(sub[user_var.temp_line].effect)
@@ -1882,9 +1781,10 @@ local function do_macro(sub, begin)
 end
 
 local function pre_template_line(sub, begin)
+	aegisub.progress.title(tr"Tag Replace - Exp pre line")
 	for i=begin,#sub do
 		local line = sub[i]
-		if line.comment and line.effect:find("^template#pre") then
+		if line.comment and line.effect:find("^template#") and get_mode(line.effect).pre then
 			var_expansion(line.text, 2, sub)
 		end
 	end
