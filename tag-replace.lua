@@ -6,7 +6,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.5.6"
+script_version = "2.6.0"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -22,6 +22,8 @@ user_var={
 	bere_line=false,
 	bere_text="",
 	bere_match={},
+	bere_num=0,
+	exp_num=0,
 	forcefps=false,
 	keytext="",
 	keyclip="",
@@ -68,7 +70,11 @@ user_var={
 		return _deepCopy(add)
 	end,
 	checkVer=function(ver, is_must_equal)
-		local pass = false
+		if ver:find("[a-zA-z]") or script_version:find("%a") then
+			user_var.debug("$checkVer: Can not check informal version", true)
+		end
+
+		local pass = nil
 
 		if is_must_equal then
 			if ver == script_version then
@@ -76,29 +82,29 @@ user_var={
 			end
 		else
 			local script_ver, input_ver = {}, {}
-			for v in script_version:gmatch("%d+") do
+			for v in (script_version:match("(.-)%-") or script_version):gmatch("%d+") do
 				table.insert(script_ver, tonumber(v))
 			end
-			for v in ver:gmatch("%d+") do
+			for v in (ver:match("(.-)%-") or ver):gmatch("%d+") do
 				table.insert(input_ver, tonumber(v))
 			end
+
 			local max_len = math.max(#script_ver, #input_ver)
+			pass = true
 			for i = 1, max_len do
 				local script_num = script_ver[i] or 0
 				local input_num = input_ver[i] or 0
 				if script_num > input_num then
-					pass = true
 					break
 				elseif script_num < input_num then
 					pass = false
 					break
 				end
-				pass = true
 			end
 		end
 
 		if not pass then
-			user_var.debug("Tag Replace version mismatch", true)
+			user_var.debug("$checkVer: Tag Replace version mismatch", true)
 		end
 	end,
 	debug=function(text, to_exit)
@@ -148,6 +154,12 @@ user_var={
 		for _,line in pairs({select(1, ...)}) do
 			table.insert(user_var.subcache, user_var.deepCopy(line))
 		end
+	end,
+	ms2f=function(ms)
+		return aegisub.frame_from_ms(ms)
+	end,
+	f2ms=function(f)
+		return aegisub.ms_from_frame(f)
 	end,
 
 	--后处理
@@ -581,6 +593,24 @@ setmetatable(user_var, {
 			_this_line.num = num
 			_this_index_time = 0
 			return _this_line
+		elseif k == "start_frame" then
+			_this_index_time = _this_index_time + 1
+			if t.this["start_time"] then
+				_this_index_time = 0
+				return user_var.ms2f(_this_line["start_time"])
+			else
+				_this_index_time = 0
+				return nil
+			end
+		elseif k == "end_frame" then
+			_this_index_time = _this_index_time + 1
+			if t.this["end_time"] then
+				_this_index_time = 0
+				return user_var.ms2f(_this_line["end_time"])
+			else
+				_this_index_time = 0
+				return nil
+			end
 		else
 			_this_index_time = _this_index_time + 1
 			if t.this[k] then
@@ -595,6 +625,7 @@ setmetatable(user_var, {
 })
 local user_var_org = user_var.deepCopy(user_var)
 
+--初始化，删除所有beretag!行，并还原:beretag@行
 local function initialize(sub,begin)
 	user_var = user_var_org.deepCopy(user_var_org)
 	_this_line = nil
@@ -662,6 +693,7 @@ end
 local function get_mode(effect)--return table
 	local modestring = effect:match("#(.*)$")
 	local mode={
+		pre=false,
 		recache=false,
 		cuttag=false,
 		strictstyle=false,
@@ -719,7 +751,7 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 	end
 	--扩展变量
 	while true do
-		pos1, pos2 = text:find("%$[%w_%[%]%.\"%-%+%*/%%]+")
+		pos1, pos2 = text:find("%$[%w_%[%]%.\"%-%+%*/%%%^]+")
 		if not pos1 then break end
 		local var = text:sub(pos1+1,pos2)
 		if var~="" then--扩展预留关键词
@@ -737,6 +769,7 @@ local function var_expansion(text, re_num, sub)--input文本和replace次数，�
 		end
 	end
 	--扩展表达式
+	user_var.exp_num = re_num - 1
 	while true do
 		pos1, pos2 = text:find("!.-!")
 		if not pos1 then break end
@@ -754,10 +787,11 @@ end
 
 local append_num
 
-local function do_replace(sub, bere, mode, begin)--return int
+local function do_replace(sub, bere, mode)--return int
 	if sub[bere].comment or not sub[bere].effect:find("^beretag[@!]") then return 1 end--若该行被注释或为非beretag行，则跳过
 	if not cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass) then return 1 end--判断该行class是否与模板行class有交集
 	--准备replace
+	user_var.bere_num = user_var.bere_num + 1
 	local insert_line, insert_table=sub[bere], {}
 	local find_pos, kdur_num=1, 2
 	while true do--写入kdur表
@@ -927,13 +961,13 @@ local function do_replace(sub, bere, mode, begin)--return int
 		end
 		
 		if user_var.cuttime.frame_model and aegisub.video_size() then
-			local start_f, end_f = aegisub.frame_from_ms(insert_line.start_time), aegisub.frame_from_ms(insert_line.end_time)
+			local start_f, end_f = user_var.ms2f(insert_line.start_time), user_var.ms2f(insert_line.end_time)
 			local total_time = end_f-start_f
 			for i=1,total_time do
 				local line = user_var.deepCopy(insert_line)
 				line.effect = "beretag!"..line.effect:sub(9)
-				line.start_time = aegisub.ms_from_frame(start_f+i-1)
-				line.end_time = aegisub.ms_from_frame(start_f+i)
+				line.start_time = user_var.f2ms(start_f+i-1)
+				line.end_time = user_var.f2ms(start_f+i)
 				line.text = _getTag(i,total_time,value_table,end_value_table)..line.text
 				table.insert(insert_table,line)
 			end
@@ -1088,9 +1122,7 @@ local function find_event(sub)
 	end
 end
 
-local function do_macro(sub)
-	local begin=find_event(sub)
-	initialize(sub,begin)--初始化，删除所有beretag!行，并还原:beretag@行
+local function do_macro(sub, begin)
 	user_var.temp_line=begin
 	user_var.sub=sub
 	user_var.begin=begin
@@ -1256,10 +1288,14 @@ local function do_macro(sub)
 						end
 						local find_end = #sub
 						while bere<=find_end do--找到bere行
-							if not sub[bere].comment and sub[bere].effect:find("^beretag[@!]") and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass) 
-								and (not mode.strictactor or sub[user_var.temp_line].actor==sub[bere].actor) and (not mode.strictstyle or sub[user_var.temp_line].style==sub[bere].style) then
+							if not sub[bere].comment and sub[bere].effect:find("^beretag[@!]")
+								and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass) 
+								and (not mode.strictactor or sub[user_var.temp_line].actor==sub[bere].actor)
+								and (not mode.strictstyle or sub[user_var.temp_line].style==sub[bere].style) then
 
-								if (user_var.keytext=="" or not user_var.keytext) and user_var.keyclip~="" and user_var.keyclip then--只有clip的情况
+								if (user_var.keytext=="" or not user_var.keytext)
+									and user_var.keyclip~="" and user_var.keyclip
+									then--只有clip的情况
 									--处理keyclip内容
 									local key_clip_point_table = {}
 									local key_clip_table = {}
@@ -1298,29 +1334,128 @@ local function do_macro(sub)
 									local time_start, step_num, time_end = key_line.start_time, 1
 									if time_start<=0 then time_start = -400/fps end
 									time_end = time_start
+									local key_clip_point_table_len = #key_clip_point_table
 									if mode.append then
-										for i=1,#key_clip_point_table do
+										for i=1,key_clip_point_table_len do
 											local insert_key_line = key_line
 											insert_key_line.text = key_clip_point_table[i] .. insert_key_line.text
-	
+
 											insert_key_line.start_time = time_end
 											time_end = time_start + step_num*1000/fps
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
-	
+
+											-- 替换 \fad 和 \t
+											insert_key_line.text = insert_key_line.text
+												:gsub([[\fad%([^%)]*%)]], function(match)
+													local num1, num2 = match:match("%(([^,]+),([^%)]+)%)")
+													num1, num2 = tonumber(num1), tonumber(num2)
+													local sf, ef = user_var.ms2f(insert_key_line.start_time), user_var.ms2f(insert_key_line.end_time)
+													local f1, f2 = user_var.ms2f(user_var.start_time + num1), user_var.ms2f(user_var.end_time - num2) + 1
+													if sf < f1 then
+														return string.format(
+															[[\alpha%X]],
+															255 * (f1 - sf) / (f1 - user_var.start_frame))
+													elseif ef > f2 then
+														return string.format(
+															[[\alpha%X]],
+															255 * (ef - f2) / (user_var.end_frame - f2))
+													else
+														return ""
+													end
+												end)
+												:gsub([[\t%([^%)]*%)]], function(match)
+													local vals = {}
+													for s in (match:match([[^\t%(([^\]+).+%)$]]) or ""):gmatch("[^,]+") do
+														table.insert(vals, s)
+													end
+													if #vals == 0 then
+														vals[1] = 0
+														vals[2] = user_var.end_time - user_var.start_time
+														vals[3] = 1
+													elseif #vals == 1 then -- 加速度
+														vals[3] = vals[1]
+														vals[1] = 0
+														vals[2] = user_var.end_time - user_var.start_time
+													elseif #vals == 2 then -- 时间
+														vals[3] = 1
+													end
+
+													vals[4] = match:match([[^\t%([^\]*(.+)%)$]])
+													if not vals[4] or #vals > 4 then
+														user_var.debug(string.format([[Wrong \t in %d]], user_var.num), true)
+													end
+
+													local offset = user_var.start_time - insert_key_line.start_time
+													return string.format([[\t(%d,%d,%s,%s)]],
+														vals[1] + offset,
+														vals[2] + offset,
+														vals[3], vals[4])
+												end)
+
+											user_var.keyProc(insert_key_line, {i,key_clip_point_table_len})
 											sub[0] = insert_key_line
 										end
 									else
 										local insert_pos = bere+1
-										for i=1,#key_clip_point_table do
+										for i=1,key_clip_point_table_len do
 											local insert_key_line = key_line
 											insert_key_line.text = key_clip_point_table[i] .. insert_key_line.text
-	
+
 											insert_key_line.start_time = time_end
 											time_end = time_start + step_num*1000/fps
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
-	
+
+											-- 替换 \fad 和 \t
+											insert_key_line.text = insert_key_line.text
+												:gsub([[\fad%([^%)]*%)]], function(match)
+													local num1, num2 = match:match("%(([^,]+),([^%)]+)%)")
+													num1, num2 = tonumber(num1), tonumber(num2)
+													local sf, ef = user_var.ms2f(insert_key_line.start_time), user_var.ms2f(insert_key_line.end_time)
+													local f1, f2 = user_var.ms2f(user_var.start_time + num1), user_var.ms2f(user_var.end_time - num2) + 1
+													if sf < f1 then
+														return string.format(
+															[[\alpha%X]],
+															255 * (f1 - sf) / (f1 - user_var.start_frame))
+													elseif ef > f2 then
+														return string.format(
+															[[\alpha%X]],
+															255 * (ef - f2) / (user_var.end_frame - f2))
+													else
+														return ""
+													end
+												end)
+												:gsub([[\t%([^%)]*%)]], function(match)
+													local vals = {}
+													for s in (match:match([[^\t%(([^\]+).+%)$]]) or ""):gmatch("[^,]+") do
+														table.insert(vals, s)
+													end
+													if #vals == 0 then
+														vals[1] = 0
+														vals[2] = user_var.end_time - user_var.start_time
+														vals[3] = 1
+													elseif #vals == 1 then -- 加速度
+														vals[3] = vals[1]
+														vals[1] = 0
+														vals[2] = user_var.end_time - user_var.start_time
+													elseif #vals == 2 then -- 时间
+														vals[3] = 1
+													end
+
+													vals[4] = match:match([[^\t%([^\]*(.+)%)$]])
+													if not vals[4] or #vals > 4 then
+														user_var.debug(string.format([[Wrong \t in %d]], user_var.num), true)
+													end
+
+													local offset = user_var.start_time - insert_key_line.start_time
+													return string.format([[\t(%d,%d,%s,%s)]],
+														vals[1] + offset,
+														vals[2] + offset,
+														vals[3], vals[4])
+												end)
+
+											user_var.keyProc(insert_key_line, {i,key_clip_point_table_len})
 											sub.insert(insert_pos,insert_key_line)
 											insert_pos = insert_pos+1
 										end
@@ -1528,6 +1663,54 @@ local function do_macro(sub)
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
 
+											-- 替换 \fad 和 \t
+											insert_key_line.text = insert_key_line.text
+												:gsub([[\fad%([^%)]*%)]], function(match)
+													local num1, num2 = match:match("%(([^,]+),([^%)]+)%)")
+													num1, num2 = tonumber(num1), tonumber(num2)
+													local sf, ef = user_var.ms2f(insert_key_line.start_time), user_var.ms2f(insert_key_line.end_time)
+													local f1, f2 = user_var.ms2f(user_var.start_time + num1), user_var.ms2f(user_var.end_time - num2) + 1
+													if sf < f1 then
+														return string.format(
+															[[\alpha%X]],
+															255 * (f1 - sf) / (f1 - user_var.start_frame))
+													elseif ef > f2 then
+														return string.format(
+															[[\alpha%X]],
+															255 * (ef - f2) / (user_var.end_frame - f2))
+													else
+														return ""
+													end
+												end)
+												:gsub([[\t%([^%)]*%)]], function(match)
+													local vals = {}
+													for s in (match:match([[^\t%(([^\]+).+%)$]]) or ""):gmatch("[^,]+") do
+														table.insert(vals, s)
+													end
+													if #vals == 0 then
+														vals[1] = 0
+														vals[2] = user_var.end_time - user_var.start_time
+														vals[3] = 1
+													elseif #vals == 1 then -- 加速度
+														vals[3] = vals[1]
+														vals[1] = 0
+														vals[2] = user_var.end_time - user_var.start_time
+													elseif #vals == 2 then -- 时间
+														vals[3] = 1
+													end
+
+													vals[4] = match:match([[^\t%([^\]*(.+)%)$]])
+													if not vals[4] or #vals > 4 then
+														user_var.debug(string.format([[Wrong \t in %d]], user_var.num), true)
+													end
+
+													local offset = user_var.start_time - insert_key_line.start_time
+													return string.format([[\t(%d,%d,%s,%s)]],
+														vals[1] + offset,
+														vals[2] + offset,
+														vals[3], vals[4])
+												end)
+
 											user_var.keyProc(insert_key_line, {i,key_rot_len})
 											sub[0] = insert_key_line
 										end
@@ -1550,6 +1733,54 @@ local function do_macro(sub)
 											time_end = time_start + step_num*1000/fps
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
+
+											-- 替换 \fad 和 \t
+											insert_key_line.text = insert_key_line.text
+												:gsub([[\fad%([^%)]*%)]], function(match)
+													local num1, num2 = match:match("%(([^,]+),([^%)]+)%)")
+													num1, num2 = tonumber(num1), tonumber(num2)
+													local sf, ef = user_var.ms2f(insert_key_line.start_time), user_var.ms2f(insert_key_line.end_time)
+													local f1, f2 = user_var.ms2f(user_var.start_time + num1), user_var.ms2f(user_var.end_time - num2) + 1
+													if sf < f1 then
+														return string.format(
+															[[\alpha%X]],
+															255 * (f1 - sf) / (f1 - user_var.start_frame))
+													elseif ef > f2 then
+														return string.format(
+															[[\alpha%X]],
+															255 * (ef - f2) / (user_var.end_frame - f2))
+													else
+														return ""
+													end
+												end)
+												:gsub([[\t%([^%)]*%)]], function(match)
+													local vals = {}
+													for s in (match:match([[^\t%(([^\]+).+%)$]]) or ""):gmatch("[^,]+") do
+														table.insert(vals, s)
+													end
+													if #vals == 0 then
+														vals[1] = 0
+														vals[2] = user_var.end_time - user_var.start_time
+														vals[3] = 1
+													elseif #vals == 1 then -- 加速度
+														vals[3] = vals[1]
+														vals[1] = 0
+														vals[2] = user_var.end_time - user_var.start_time
+													elseif #vals == 2 then -- 时间
+														vals[3] = 1
+													end
+
+													vals[4] = match:match([[^\t%([^\]*(.+)%)$]])
+													if not vals[4] or #vals > 4 then
+														user_var.debug(string.format([[Wrong \t in %d]], user_var.num), true)
+													end
+
+													local offset = user_var.start_time - insert_key_line.start_time
+													return string.format([[\t(%d,%d,%s,%s)]],
+														vals[1] + offset,
+														vals[2] + offset,
+														vals[3], vals[4])
+												end)
 
 											user_var.keyProc(insert_key_line, {i,key_rot_len})
 											sub.insert(insert_pos,insert_key_line)
@@ -1577,39 +1808,18 @@ local function do_macro(sub)
 						user_var.keytext, user_var.keyclip = "", ""
 					end
 					--先 keyframe 后 (替换)
-					if mode.strictstyle then
-						if mode.strictactor then
-							while bere <= #sub - append_num do
-								if sub[user_var.temp_line].style == sub[bere].style and sub[user_var.temp_line].actor == sub[bere].actor then
-									user_var.bere_line = bere
-									bere = bere + do_replace(sub, bere, mode, begin)
-								else
-									bere = bere + 1
-								end
-							end
-						else
-							while bere <= #sub - append_num do
-								if sub[user_var.temp_line].style == sub[bere].style then
-									user_var.bere_line = bere
-									bere = bere + do_replace(sub, bere, mode, begin)
-								else
-									bere = bere + 1
-								end
-							end
-						end
-					elseif mode.strictactor then
-						while bere <= #sub - append_num do
-							if sub[user_var.temp_line].actor == sub[bere].actor then
-								user_var.bere_line = bere
-								bere = bere + do_replace(sub, bere, mode, begin)
-							else
-								bere = bere + 1
-							end
-						end
-					else
-						while bere <= #sub - append_num do
+					while bere <= #sub - append_num do
+						if (
+								not mode.strictstyle
+								or sub[user_var.temp_line].style == sub[bere].style)
+							and (
+								not mode.strictactor
+								or sub[user_var.temp_line].actor == sub[bere].actor)
+							then
 							user_var.bere_line = bere
-							bere = bere + do_replace(sub, bere, mode, begin)
+							bere = bere + do_replace(sub, bere, mode)
+						else
+							bere = bere + 1
 						end
 					end
 				end
@@ -1657,6 +1867,7 @@ local function do_macro(sub)
 		user_var.bere_line = false
 		user_var.bere_text = ""
 		user_var.bere_match = {}
+		user_var.bere_num = 0
 	end
 
 	--删除所有空的 beretag! 行
@@ -1670,11 +1881,23 @@ local function do_macro(sub)
 	end
 end
 
-local function macro_processing_function(subtitles)--Execute Macro. 执行宏
-	do_macro(subtitles)
+local function pre_template_line(sub, begin)
+	for i=begin,#sub do
+		local line = sub[i]
+		if line.comment and line.effect:find("^template#pre") then
+			var_expansion(line.text, 2, sub)
+		end
+	end
 end
 
-local function comment_template_line(sub,selected_table)
+local function macro_processing_function(subtitles)--Execute Macro. 执行宏
+	local begin = find_event(subtitles)
+	initialize(subtitles, begin)
+	pre_template_line(subtitles, begin)
+	do_macro(subtitles, begin)
+end
+
+local function comment_template_line(sub, selected_table)
 	for i=find_event(sub),#sub do
 		if selected_table[tostring(i)]~=true and sub[i].effect:find("^template[@#]") and sub[i].comment then
 			local line = sub[i]
@@ -1686,27 +1909,31 @@ end
 
 local function uncomment_template_line(sub)
 	for i=find_event(sub),#sub do
-		if sub[i].effect:find("^:template") then
-			local line = sub[i]
+		local line = sub[i]
+		if line.effect:find("^:template") then
 			line.effect = line.effect:sub(2)
 			sub[i] = line
 		end
 	end
 end
 
-local function macro_processing_function_selected(subtitles,selected_lines)--Execute Macro in selected lines. 在所选行执行宏
+--Execute Macro in selected lines. 在所选行执行宏
+local function macro_processing_function_selected(subtitles, selected_lines)
+	local begin = find_event(subtitles)
+	initialize(subtitles,begin)
+	pre_template_line(subtitles, begin)
 	--搜索所有非所选的template行，对其中注释行头部添加:，执行完后再还原
 	local selected_table={}
 	for i,v in ipairs(selected_lines) do
 		selected_table[tostring(v)]=true
 	end
 	comment_template_line(subtitles,selected_table)
-	do_macro(subtitles)
+	do_macro(subtitles, begin)
 	uncomment_template_line(subtitles)
 end
 
 local function macro_processing_function_initialize(subtitles)--初始化
-	initialize(subtitles,find_event(subtitles))
+	initialize(subtitles, find_event(subtitles))
 end
 
 aegisub.register_macro(tr"Tag Replace Apply", tr"Replace all strings with your settings", macro_processing_function)
@@ -1714,7 +1941,10 @@ aegisub.register_macro(tr"Tag Replace Apply in selected lines", tr"Replace selec
 aegisub.register_macro(tr"Tag Replace Initialize", tr"Only do the initialize function", macro_processing_function_initialize)
 
 local function filter_processing_function(subtitles, old_settings)
-	do_macro(subtitles)
+	local begin = find_event(subtitles)
+	initialize(subtitles, begin)
+	pre_template_line(subtitles, begin)
+	do_macro(subtitles, begin)
 	for i = find_event(subtitles), #subtitles do
 		if subtitles[i].effect:find("^beretag!") and not subtitles[i].comment then
 			local line = subtitles[i]

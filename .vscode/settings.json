@@ -1,8 +1,9 @@
 {
     "[lua]": {
+        "editor.tabSize": 3,
         "editor.formatOnSave": false,
         "editor.formatOnType": false,
-        "editor.defaultFormatter": null
+        "editor.defaultFormatter": "Don't format"
     },
     "Lua.diagnostics.globals": [
         "script_description",
@@ -20,6 +21,5 @@
         "param-type-mismatch",
         "need-check-nil",
         "assign-type-mismatch"
-    ],
-    "editor.tabSize": 3
+    ]
 }
