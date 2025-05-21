@@ -1,15 +1,23 @@
-﻿local util = require("aegisub.util")
-require("karaskel")
+﻿require("karaskel")
+local util = require("aegisub.util")
+local ffi = require("ffi")
+local bit = require("bit")
 
 local tr=aegisub.gettext
 
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.6.1"
+script_version = "2.6.2"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
+
+local base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local base64_reverse = {}
+for i = 1, #base64_chars do
+	base64_reverse[base64_chars:sub(i, i)] = i - 1
+end
 
 local user_var--自定义变量键值表
 user_var={
@@ -161,6 +169,60 @@ user_var={
 	f2ms=function(f)
 		return aegisub.ms_from_frame(f)
 	end,
+	enbase64=function(str)
+		local b64 = {}
+		local bit = 0
+		local buffer = 0
+		local length = #str
+		local index = 1
+
+		while index <= length do
+			buffer = buffer * 256
+			if index <= length then
+					buffer = buffer + string.byte(str, index)
+					index = index + 1
+			end
+			bit = bit + 8
+			while bit >= 6 do
+					bit = bit - 6
+					local char_index = math.floor(buffer / (2 ^ bit)) % 64 + 1
+					table.insert(b64, base64_chars:sub(char_index, char_index))
+					buffer = buffer % (2 ^ bit)
+			end
+		end
+
+		if bit > 0 then
+			buffer = buffer * (2 ^ (6 - bit))
+			table.insert(b64, base64_chars:sub(buffer + 1, buffer + 1))
+		end
+
+		while #b64 % 4 ~= 0 do
+			table.insert(b64, "=")
+		end
+
+		return table.concat(b64)
+	end,
+	debase64=function(str)
+		local result = {}
+		local buffer = 0
+		local bit = 0
+		local length = #str
+
+		for i = 1, length do
+			local char = str:sub(i, i)
+			if char ~= "=" then
+					buffer = buffer * 64 + base64_reverse[char]
+					bit = bit + 6
+					if bit >= 8 then
+						bit = bit - 8
+						table.insert(result, string.char(math.floor(buffer / (2 ^ bit))))
+						buffer = buffer % (2 ^ bit)
+					end
+			end
+		end
+
+		return table.concat(result)
+	end,
 
 	--后处理
 
@@ -183,9 +245,9 @@ user_var={
 
 	--行处理
 
-	-- @param line
-	-- @param tags: string | nil
-	-- @return nil
+	--- @param line table
+	--- @param tags string | nil
+	--- @return nil
 	rePreLine=function(line, tags)
 		local meta, styles = karaskel.collect_head(user_var.sub)
 		local style = styles[line.style]
@@ -231,16 +293,16 @@ user_var={
 		karaskel.preproc_line_size(meta, styles, line)
 		karaskel.preproc_line_pos(meta, styles, line)
 	end,
-	-- @param line  
-	-- @param callback: function(line, position: dict, progress: list) -> nil  
-	-- 　@position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r}  
-	-- 　@progress: {x_fraction: list, y_fraction, x_percent: number, y_percent}  
-	-- @param step: list | nil  
-	-- 　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
-	-- 　　expand: list{number | nil} = {left, top, right, bottom}  
-	-- @param pos: list | nil  
-	-- 　{x: number | nil, y: number | nil}  
-	-- @return nil, insert subcache
+	--- @param line table  
+	--- @param callback function(line, position: dict, progress: list) -> nil  
+	--- 　@position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r}  
+	--- 　@progress: {x_fraction: list, y_fraction, x_percent: number, y_percent}  
+	--- @param step table<number | nil> | nil  
+	--- 　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
+	--- 　　expand: list{number | nil} = {left, top, right, bottom}  
+	--- @param pos table<number | nil> | nil  
+	--- 　{x: number | nil, y: number | nil}  
+	--- @return nil -- insert subcache
 	gradient=function(line, callback, step, pos)
 		line = user_var.deepCopy(line)
 
@@ -491,8 +553,8 @@ user_var={
 
 		return result
 	end,
-	-- @param line
-	-- @param width: number | nil
+	--- @param line table
+	--- @param width number | nil
 	posLine=function(line, width)
 		line = user_var.deepCopy(line)
 
@@ -558,6 +620,7 @@ user_var={
 
 	--外部
 
+	--- @return string | boolean?
 	cmdCode=function(cmd, popen)
 		if popen then
 			local handle = io.popen(cmd)
@@ -568,9 +631,144 @@ user_var={
 			return os.execute(cmd)
 		end
 	end,
+	psCode=function(cmd, popen)
+		cmd = [[powershell -ExecutionPolicy Bypass -Command "]] ..
+			string.format(([[
+					$base64String = "%s";
+
+					$bytes = [System.Convert]::FromBase64String($base64String);
+					$decodedString = [System.Text.Encoding]::UTF8.GetString($bytes);
+
+					Invoke-Expression $decodedString;
+				]]):gsub('\r?\n', ''),
+				user_var.enbase64(cmd:gsub('\r?\n', ''))
+			):gsub('"', '\\"') .. '"'
+		return user_var.cmdCode(cmd, popen)
+	end,
 	pyCode=function(cmd, popen)
-		return user_var.cmdCode(string.format([[python -c "%s"]], cmd), popen)
-	end
+		return user_var.cmdCode(string.format(
+			[[python -c "%s"]], cmd:gsub([[\N]], ';')), popen)
+	end,
+	getGlyph=function(char, line)
+		local line = user_var.deepCopy(line)
+		user_var.rePreLine(line)
+		local _, _, descent, ext_lead = aegisub.text_extents(line.styleref, "")
+
+		local ps_script = string.format(
+			[[$Character='%s';$FontName="%s";$FontSize=%s;]], char, line.styleref.fontname, line.bottom - line.top - descent
+		) .. [==[
+				Add-Type -AssemblyName PresentationCore;
+				Add-Type -AssemblyName WindowsBase;
+
+				function Get-GlyphData {
+					[CmdletBinding()]param (
+						[Parameter(Mandatory = $true)]
+						[char]$Character,
+						[Parameter(Mandatory = $true)]
+						[string]$FontName,
+						[Parameter(Mandatory = $true)]
+						[string]$FontSize
+					);
+
+					<# 查找字体 #>
+					$fontFamily = [System.Windows.Media.Fonts]::SystemFontFamilies |
+					Where-Object { $_.FamilyNames.Values -contains $FontName } |
+					Select-Object -First 1;
+					if (-not $fontFamily) { throw "Font '$FontName' not found"; }
+
+					<# 获取GlyphTypeface #>
+					$typeface = New-Object System.Windows.Media.Typeface(
+						$fontFamily,
+						[System.Windows.FontStyles]::Normal,
+						[System.Windows.FontWeights]::Normal,
+						[System.Windows.FontStretches]::Normal
+					);
+					$glyphTypeface = $null;
+					if (-not $typeface.TryGetGlyphTypeface([ref]$glyphTypeface)) {
+						throw "Failed to get GlyphTypeface";
+					}
+
+					<# 获取字形索引 #>
+					$unicode = [int][char]$Character;
+					if (-not $glyphTypeface.CharacterToGlyphMap.ContainsKey($unicode)) {
+						throw "Character '$Character' not found";
+					}
+					$glyphIndex = $glyphTypeface.CharacterToGlyphMap[$unicode];
+
+					<# 获取几何数据 #>
+					$geometry = $glyphTypeface.GetGlyphOutline($glyphIndex, $FontSize, 1);
+					$pathGeometry = [System.Windows.Media.PathGeometry]::CreateFromGeometry($geometry);
+
+					<# 计算行高并进行向上偏移 #>
+					$lineHeight = $glyphTypeface.LineSpacing * $FontSize;
+					$offsetY = $pathGeometry.Bounds.Height - $lineHeight;
+
+					$assCommands = New-Object System.Collections.Generic.List[string];
+
+					foreach ($figure in $pathGeometry.Figures) {
+						$startPoint = $figure.StartPoint;
+						$assCommands.Add("m $($startPoint.X.ToString("F2")) $(($startPoint.Y + $offsetY).ToString("F2"))");
+
+						$currentPoint = $startPoint;
+						foreach ($segment in $figure.Segments) {
+							if ($segment -is [System.Windows.Media.LineSegment]) {
+									$assCommands.Add("l $($segment.Point.X.ToString("F2")) $(($segment.Point.Y + $offsetY).ToString("F2"))");
+									$currentPoint = $segment.Point;
+							}
+							elseif ($segment -is [System.Windows.Media.BezierSegment]) {
+									$assCommands.Add("b $($segment.Point1.X.ToString("F2")) $(($segment.Point1.Y + $offsetY).ToString("F2")) $($segment.Point2.X.ToString("F2")) $(($segment.Point2.Y + $offsetY).ToString("F2")) $($segment.Point3.X.ToString("F2")) $(($segment.Point3.Y + $offsetY).ToString("F2"))");
+									$currentPoint = $segment.Point3;
+							}
+							elseif ($segment -is [System.Windows.Media.PolyLineSegment]) {
+									foreach ($point in $segment.Points) {
+										$assCommands.Add("l $($point.X.ToString("F2")) $(($point.Y + $offsetY).ToString("F2"))");
+										$currentPoint = $point;
+									}
+							}
+							elseif ($segment -is [System.Windows.Media.PolyBezierSegment]) {
+									$points = $segment.Points;
+									for ($i = 0; $i -lt $points.Count; $i += 3) {
+										if ($i + 2 -ge $points.Count) { break }
+										$assCommands.Add("b $($points[$i].X.ToString("F2")) $(($points[$i].Y + $offsetY).ToString("F2")) $($points[$i+1].X.ToString("F2")) $(($points[$i+1].Y + $offsetY).ToString("F2")) $($points[$i+2].X.ToString("F2")) $(($points[$i+2].Y + $offsetY).ToString("F2"))");
+										$currentPoint = $points[$i + 2];
+									}
+							}
+						}
+						$assCommands.Add("l $($startPoint.X.ToString("F2")) $(($startPoint.Y + $offsetY).ToString("F2"))"); <# 闭合路径 #>
+					}
+
+					<# 构建 ASS 绘图格式 #>
+					$assDrawing = "{\p1} " + ($assCommands -join " ") + " {\p0}";
+					$assDrawing;
+				}
+
+				try {
+					Get-GlyphData -Character $Character -FontName $FontName -FontSize $FontSize;
+				}
+				catch {
+					$out = "[ERROR] Character=$Character, FontName=$FontName, FontSize=$FontSize, Error=$($_.Exception.Message)";
+					
+					$utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($out);
+					$base64String = [Convert]::ToBase64String($utf8Bytes);
+					Write-Output $base64String;
+				}
+		]==]
+
+		local res = user_var.psCode(ps_script, true)
+		res = res:gsub("\r?\n$", "")
+		if not res:find("^{") then
+			local decoded = user_var.debase64(res)
+			if decoded:find("^%[ERROR%]") then
+				user_var.debug(string.format(
+					"%s - %s: %s",
+					user_var.temp_line, user_var.num, decoded
+				))
+				return nil
+			end
+		end
+
+		return res
+	end,
 }
 local _this_line, _this_index_time = nil, 0
 setmetatable(user_var, {
@@ -719,7 +917,8 @@ local function get_mode(effect)--return table
 	return mode
 end
 
-local function var_expansion(text, re_num, sub)--input文本和replace次数，通过re_num映射karaok变量至变量表
+--input文本和replace次数，通过re_num映射karaok变量至变量表
+local function var_expansion(text, re_num, sub)
 	--扩展表达式中的$部分
 	local pos1, pos2 = 1, 1
 	while true do

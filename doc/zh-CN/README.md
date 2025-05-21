@@ -206,6 +206,10 @@ Tag Replace 的操作规范中，局部变量同 Lua 语法，全局变量使用
 
 * #### \$f2ms(f: number) -> int
 
+* #### \$enbase64(str) -> str
+
+* #### \$debase64(str) -> str
+
 
 ### 后处理
 
@@ -246,11 +250,20 @@ Tag Replace 的操作规范中，局部变量同 Lua 语法，全局变量使用
   e.g. `$getTagCut("1{22}333{}{}")` -> `{{"1", false, 1}, {"{22}", true, 1}, {"333", false, 2}, {"{}", true, 2}, {"{}", true, 3}}`
 
 * #### \$posLine(line, width: number | nil) -> nil  
-  生成定位线
+  生成定位线，行插入到 $subcache
 
 
 ### 调用外部
 
-* #### \$cmdCode(cmd: str, popen: bool)
+* #### \$cmdCode(cmd: str, popen: bool) -> string | bool
+  调用命令行，使用 popen 时返回输出结果，否则返回是否成功的 bool 值
+
+* #### \$psCode(cmd: str, popen: bool)
+  调用 PowerShell，会自动预处理字符串
 
 * #### \$pyCode(cmd: str, popen: bool)
+  调用 Python，会自动预处理字符串
+
+* #### \$getGlyph(char, line) -> str
+  传入字符和对应样式的行对象，输出字符对应的 ASS 绘图代码  
+  （目前处于实验性阶段，通过 powershell 调用 WPF API，效率很低）
