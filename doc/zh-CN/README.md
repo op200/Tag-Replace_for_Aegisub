@@ -18,9 +18,9 @@
 2. 再新建一行字幕，在特效(Effect)栏写上 `beretag@1#`，文本(Text)栏写上 `{tag1}12345`
 3. 执行脚本
 
-![图片](https://github.com/user-attachments/assets/2e59cdbc-ba6d-41a4-8066-0d4416503dae)
+![图片](img/001.webp)
 
-![图片](https://github.com/user-attachments/assets/61feba4d-5594-4cd1-bb7c-bff3a060fdab)
+![图片](img/002.webp)
 
 4. 执行后，第二行被注释掉了，新出现了第三行，且第三行的 `tag1` 被替换成了 `tag2`  
     这就是 `Tag Replace` 最底层的功能——替换标签
@@ -70,9 +70,14 @@ temp行的 `#` 后跟的是模式名。
   　新的行将被append到所有字幕行的末尾，而不是bere行的后面
 
 * #### keyframe  
-  　将先执行关键帧替换，对应关键帧文本为 $keytext，蒙蔽为 $keyclip  
-  　对应的标准分别是 `Adobe After Effects 6.0 Keyframe Data` 和 `shake_shape_data 4.0`  
-  　可通过 $forcefps 修改帧率，否则根据输入的追踪数据里的帧率计算时轴
+  　将先执行关键帧替换，对应的关键帧文本为 `$keytext`，蒙版为 `$keyclip`。  
+  　对应的标准分别是 `Adobe After Effects 6.0 Keyframe Data` 和 `shake_shape_data 4.0`。  
+  　可通过 $forcefps 修改帧率，否则根据输入的追踪数据里的帧率计算时轴。
+  ```
+  Comment: 0,0:13:26.48,0:13:29.48,screen,屏幕字,0,0,0,template#,!$keytext=[[这里填入关键帧文本]]!
+  Comment: 0,0:13:26.48,0:13:29.48,screen,屏幕字,0,0,0,template@key#keyframe;append,{这里可以替换掉一些没用的标签，例如\fscx.*\fscy.*\frz.*\org[^%)]*%)}{}
+  Comment: 0,0:13:26.48,0:13:29.48,screen,屏幕字,0,0,0,:beretag@key,{一些标签}追踪文本
+  ```
 
 * #### recache  
   　将缓存行(`$subcache`)插入到字幕
@@ -82,7 +87,7 @@ temp行的 `#` 后跟的是模式名。
 
 * #### cuttime  
   　`{<start_tag>}{<end_tag>}`  
-  　bere行在时域上从start_tag渐变到end_tag  
+  　bere行在时域上从 start_tag 渐变到 end_tag  
   　修改 $cuttime 中的成员，可切换帧模式、修改加速度、自定义处理函数
 
 * #### classmix  
@@ -95,35 +100,45 @@ temp行的 `#` 后跟的是模式名。
 
 #### 例1
 
-可以通过 `findtext` 模式和正则表达式，把 `中文|英文` 的行分割成双语字幕，并附带漏译检测($debug 函数中的形参就是检测到漏译后输出的文本)
+可以通过 `findtext` 模式和正则表达式，把 `中文\N英文` 的行分割成双语字幕，并附带漏译检测
 ```
-Comment: 0,0:00:00.00,0:00:00.00,zh,,0,1240,0,template@dialog#onlyfind,!local line=sub[$bere_line] if not line.text:find("|") then $debug("") end table.insert($subcache,$deepCopy(line)) if line.style=="zh" then line.style="en" else if line.style=="zh-top" then line.style="en-top" else $debug("dialog error: "..line.text) end end line.layer=1 table.insert($subcache,line)!
-Comment: 0,0:00:00.00,0:00:00.00,zh,,0,1240,0,template@dialog#recache;uninsert;append,{}{}
-Comment: 0,0:00:00.00,0:00:00.00,zh,,0,1240,0,template@dialog#findtext;strictstyle,{|.*}
-Comment: 0,0:00:00.00,0:00:00.00,en,,0,1240,0,template@dialog#findtext;strictstyle,{.*|}
-Comment: 0,0:00:00.00,0:00:00.00,zh-top,,0,1240,0,template@dialog#findtext;strictstyle,{|.*}
-Comment: 0,0:00:00.00,0:00:00.00,en-top,,0,1240,0,template@dialog#findtext;strictstyle,{.*|}
-Dialogue: 0,0:00:00.00,0:00:05.00,zh,,0,0,0,beretag@dialog,一二三|one two three
-Dialogue: 0,0:00:00.00,0:00:05.00,zh-top,,0,0,0,beretag@dialog,编辑字幕|Edit ASS
+Comment: 0,0:00:00.00,0:00:00.00,zh,,0,0,0,template@dialog#onlyfind;uninsert;recache;append,!if not $text:find[[\N]] then $debug("对话行存在缺损: "..$num) end $addLine($this) if $style=="zh" then $this.style="en" elseif $style=="zh-top" then $this.style="en-top" else $debug("dialog error: "..$num) end $this.layer=1 $addLine($this)!
+Comment: 0,0:00:00.00,0:00:00.00,zh,,0,0,0,template@dialog#findtext;strictstyle,{%\N.*}
+Comment: 0,0:00:00.00,0:00:00.00,en,,0,0,0,template@dialog#findtext;strictstyle,{.*%\N}
+Comment: 0,0:00:00.00,0:00:00.00,zh-top,,0,0,0,template@dialog#findtext;strictstyle,{%\N.*}
+Comment: 0,0:00:00.00,0:00:00.00,en-top,,0,0,0,template@dialog#findtext;strictstyle,{.*%\N}
+Comment: 0,0:00:00.00,0:00:05.00,zh,,0,0,0,:beretag@dialog,一二三\None two three
+Comment: 0,0:00:00.00,0:00:05.00,zh-top,,0,0,0,:beretag@dialog,编辑字幕\NEdit ASS
+Dialogue: 0,0:00:00.00,0:00:05.00,zh,,0,0,0,beretag!dialog,一二三
+Dialogue: 1,0:00:00.00,0:00:05.00,en,,0,0,0,beretag!dialog,one two three
+Dialogue: 0,0:00:00.00,0:00:05.00,zh-top,,0,0,0,beretag!dialog,编辑字幕
+Dialogue: 1,0:00:00.00,0:00:05.00,en-top,,0,0,0,beretag!dialog,Edit ASS
 ```
-![图片](https://github.com/user-attachments/assets/9dfe5789-06e7-4c2e-8671-0682350081cb)
+![图片](img/003.webp)
+
 
 
 # 表达式与变量扩展
 
-通过“扩展”语法，可以将自定义的计算后的值插入文本
+通过“扩展”语法，可以将自定义的计算后的值插入文本。
 
-可以直接使用 $ 扩展变量 `{\k%d*}{\kf$kdur}`  
-可以使用 !! 扩展整个 Lua 语句 `{\blur0}{\blur!local r=math.random(5) if r==3 then r=666 end return r!}`
+可以直接使用 $ 扩展变量 `{\k%d*}{\kf$kdur}`。
+
+可以使用 `!...!` 扩展整个 Lua 语句，例如 `{\blur0}{\blur!local r=math.random(5) if r==3 then r=666 end return r!}`。
+
 
 
 # 内置变量与关键字
 
-Tag Replace 存在一些内置变量，用于方便用户操作
+Tag Replace 存在一些内置变量，用于方便用户操作。
 
-Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用 `$` 或 `user_var.` 作为开头，例如 `$number1`，本质上是 `$` 会被自动替换为 `user_var`
+Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用 `$` 或 `user_var.` 作为开头，例如 `$number1`，本质上是 `$` 会被自动替换为 `user_var`。
 
-关键字是会被直接替换的，它长得和全局变量一样，但不能真正调用到对应的变量，因为它会最优先被替换为对应值
+关键字是会被直接替换的，它长得和全局变量一样，但不能真正调用到对应的变量，因为它会最优先被替换为对应值。
+
+类型标准中，list 指的是没有非 int key 的 table，只需用 list\[num\] 访问即可；
+类型标准中，dict 指的是纯字典的 table；  
+int 指的是只有整数的 number。  
 
 * #### sub / \$sub  
   `sub` 是使用规范中唯一允许用户调用的真正的全局变量，其与 `$sub` 一样，都是 Aegisub API 的 subtitle 对象
@@ -145,38 +160,38 @@ Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用
   这几个同样是关键字，但它们与 $kdur 不同的是，它们没有对应的变量，它们是实时计算出来的
   配合 `\t` 使用，可实现简单的 karaok 效果
 
-* #### \$begin=find_event(sub)  
+* #### \$begin = find_event(sub)  
   [Events]类型行的第一行，也是 Aegisub 字幕行的第一行对应的 index 号
-* #### \$temp_line  
+* #### \$temp_line: int  
   当前所读取的template行的键  
   调用对应行可以用 `sub[$temp_line]`
-* #### \$bere_line  
+* #### \$bere_line: int  
   当前所读取的beretag行的键  
   调用对应行可以用 `sub[$bere_line]`
 
-* #### \$bere_text  
+* #### \$bere_text: str  
   当前被替换的文本
-* #### \$bere_match  
+* #### \$bere_match: list  
   匹配的文本的表
   e.g. `{\pos%((.-),(.-)%)}{\pos($bere_match[1],$bere_match[2])}`
-* #### \$bere_num  
+* #### \$bere_num: int  
   单temp行匹配的对应bere行的序号，从 1 开始
-* #### \$exp_num  
+* #### \$exp_num: int  
   单bere行执行的表达式扩展的序号，从 1 开始
 
-* #### \$forcefps=false  
+* #### \$forcefps: false | number = false  
   有值时，部分模式或函数按此值计算时轴
 * #### \$keytext $keyclip  
   `keyframe` 模式相关
-* #### \$cuttime={frame_model=true, accel=1, interpolate: function}  
+* #### \$cuttime = {frame_model = true, accel = 1, interpolate: function}  
   `cuttime` 模式相关
 
 
 # 内置函数
 
-Tag Replace 存在一些内置函数，用于调用特殊功能和更改模式处理
+Tag Replace 存在一些内置函数，用于调用特殊功能和更改模式处理。
 
-Tag Replace 的操作规范中，局部变量同 Lua 语法，全局变量使用 `$` 或 `user_var.` 作为开头，例如 `$number1`，本质上是 `$` 会被自动替换为 `user_var.`
+Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，所以使用 `$` 或 `user_var.` 作为开头，例如 `$deepCopy`，本质上是`user_var.deepCopy`。
 
 
 ### 功能性
@@ -197,39 +212,43 @@ Tag Replace 的操作规范中，局部变量同 Lua 语法，全局变量使用
   删除字幕行对象中任意个 class
 
 * #### \$newClass(line, ...: str) -> nil  
-  将字幕行对象中 class 替换为指定 class
+  将字幕行对象中 class 全部替换为指定 class
 
 * #### \$addLine(...) -> nil
   向 `$subcache` 中插入 `$deepCopy(line)`
 
 * #### \$ms2f(ms: number) -> int
+  根据载入的视频，将毫秒数转为帧数
 
 * #### \$f2ms(f: number) -> int
+  根据载入的视频，将帧数转为毫秒数
 
 * #### \$enbase64(str) -> str
+  将字符串编码为 base64 字符串
 
 * #### \$debase64(str) -> str
+  将 base64 字符串解码为原字符串
 
 
 ### 后处理
 
-* #### \$cuttime.interpolate(current_time, total_time, start_value, end_value, tag)  
-  cuttime 模式的后处理函数
+* #### \$cuttime.interpolate(current_time, total_time, start_value, end_value, tag) -> number  
+  cuttime 模式的后处理函数，用于自定义插值算法，默认根据 `$cuttime.accel` 计算插值
 
 * #### \$postProc(line)  
-  一般模式的后处理函数
+  一般模式的后处理函数，在执行每一行后对这行执行这个函数，默认为空函数
 
 * #### \$keyProc(line, progress)  
-  keyframe 模式的后处理函数
+  keyframe 模式的后处理函数，默认为空函数
 
 * #### \$classmixProc  
-  classmix 模式的后处理函数
+  classmix 模式的后处理函数，默认为 class 合并算法
 
 
 ### 行处理
 
 * #### \$rePreLine(line, tags: str | nil) -> nil  
-  重新根据头部的 ASS 样式标签执行 karakel 预处理
+  根据头部的 ASS 样式标签重新执行 karaskel 预处理
 
 * #### \$gradient(line, callback, step, pos) -> nil  
   @param line  
@@ -246,11 +265,20 @@ Tag Replace 的操作规范中，局部变量同 Lua 语法，全局变量使用
   见旧版文档
 
 * #### \$getTagCut(text: str)  
-  输入一个字符串，返回按 tag 的出现顺序切割成的 table `{{text: str, is_tag: bool, num: int}, ...}`  
-  e.g. `$getTagCut("1{22}333{}{}")` -> `{{"1", false, 1}, {"{22}", true, 1}, {"333", false, 2}, {"{}", true, 2}, {"{}", true, 3}}`
+  输入一个字符串，返回按 tag 的出现顺序切割成的 table `{{text: str, is_tag: bool, num: int}, ...}`。  
+  e.g. `$getTagCut("1{22}333{}{}")` -> `list[list[str, bool, int]]`
+  ```lua
+  {
+    {"1"   , false, 1},
+    {"{22}", true , 1},
+    {"333" , false, 2},
+    {"{}"  , true , 2},
+    {"{}"  , true , 3}
+  }
+  ```
 
 * #### \$posLine(line, width: number | nil) -> nil  
-  生成定位线，行插入到 $subcache
+  生成定位线，生成的新行直接插入到 `$subcache`
 
 
 ### 调用外部
