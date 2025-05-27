@@ -101,7 +101,7 @@ temp行的 `#` 后跟的是模式名。
 #### 例1
 
 可以通过 `findtext` 模式和正则表达式，把 `中文\N英文` 的行分割成双语字幕，并附带漏译检测
-```
+```lua
 Comment: 0,0:00:00.00,0:00:00.00,zh,,0,0,0,template@dialog#onlyfind;uninsert;recache;append,!if not $text:find[[\N]] then $debug("对话行存在缺损: "..$num) end $addLine($this) if $style=="zh" then $this.style="en" elseif $style=="zh-top" then $this.style="en-top" else $debug("dialog error: "..$num) end $this.layer=1 $addLine($this)!
 Comment: 0,0:00:00.00,0:00:00.00,zh,,0,0,0,template@dialog#findtext;strictstyle,{%\N.*}
 Comment: 0,0:00:00.00,0:00:00.00,en,,0,0,0,template@dialog#findtext;strictstyle,{.*%\N}
@@ -136,9 +136,11 @@ Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用
 
 关键字是会被直接替换的，它长得和全局变量一样，但不能真正调用到对应的变量，因为它会最优先被替换为对应值。
 
-类型标准中，list 指的是没有非 int key 的 table，只需用 list\[num\] 访问即可；
-类型标准中，dict 指的是纯字典的 table；  
-int 指的是只有整数的 number。  
+类型标注中：
+* line 指的是 Aegisub API 字幕行对象
+* list 指的是没有非 int key 的 table，只需用 list\[num\] 访问即可
+* dict 指的是纯字典的 table
+* int 指的是只有整数的 number
 
 * #### sub / \$sub  
   `sub` 是使用规范中唯一允许用户调用的真正的全局变量，其与 `$sub` 一样，都是 Aegisub API 的 subtitle 对象
@@ -183,7 +185,7 @@ int 指的是只有整数的 number。
   有值时，部分模式或函数按此值计算时轴
 * #### \$keytext $keyclip  
   `keyframe` 模式相关
-* #### \$cuttime = {frame_model = true, accel = 1, interpolate: function}  
+* #### \$cuttime = {frame_model: bool = true, accel: number = 1, interpolate: function}  
   `cuttime` 模式相关
 
 
@@ -196,7 +198,7 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
 
 ### 功能性
 
-* #### \$deepCopy(add)  
+* #### \$deepCopy(add: table) -> table  
   深复制 table 类型的变量
 
 * #### \$checkVer(ver: str, is_must_equal: bool) -> nil  
@@ -241,16 +243,18 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
 * #### \$keyProc(line, progress)  
   keyframe 模式的后处理函数，默认为空函数
 
-* #### \$classmixProc  
-  classmix 模式的后处理函数，默认为 class 合并算法
+* #### \$classmixProc(first: line, second: line, new_class: str) 
+  classmix 模式的后处理函数，默认为 class 合并算法。  
+  前两项形参分别是匹配第一个和第二个 `{}` 的行，第三个形参是第三个 `{}` 中的值。
 
 
 ### 行处理
 
-* #### \$rePreLine(line, tags: str | nil) -> nil  
+* #### \$rePreLine(line, tags: str | nil) -> nil
   根据头部的 ASS 样式标签重新执行 karaskel 预处理
 
-* #### \$gradient(line, callback, step, pos) -> nil  
+* #### \$gradient(line, callback, step, pos) -> nil
+  ```lua
   @param line  
 	@param callback: function(line, position: dict, progress: list) -> nil  
 	　@position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r}  
@@ -260,13 +264,14 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
 	　　expand: list{number | nil} = {left, top, right, bottom}  
 	@param pos: list | nil  
 	　{x: number | nil, y: number | nil}
+  ```
 
-* #### \$colorGradient(line_info, rgba, step_set, tags, control_points, pos)  
+* #### \$colorGradient(line_info, rgba, step_set, tags, control_points, pos) -> nil
   见旧版文档
 
-* #### \$getTagCut(text: str)  
+* #### \$getTagCut(text: str) -> list[list[str, bool, int]]
   输入一个字符串，返回按 tag 的出现顺序切割成的 table `{{text: str, is_tag: bool, num: int}, ...}`。  
-  e.g. `$getTagCut("1{22}333{}{}")` -> `list[list[str, bool, int]]`
+  e.g. `$getTagCut("1{22}333{}{}")` ->
   ```lua
   {
     {"1"   , false, 1},
@@ -286,10 +291,10 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
 * #### \$cmdCode(cmd: str, popen: bool) -> string | bool
   调用命令行，使用 popen 时返回输出结果，否则返回是否成功的 bool 值
 
-* #### \$psCode(cmd: str, popen: bool)
+* #### \$psCode(cmd: str, popen: bool) -> string | bool
   调用 PowerShell，会自动预处理字符串
 
-* #### \$pyCode(cmd: str, popen: bool)
+* #### \$pyCode(cmd: str, popen: bool) -> string | bool
   调用 Python，会自动预处理字符串
 
 * #### \$getGlyph(char, line) -> str
