@@ -8,7 +8,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.6.2"
+script_version = "2.6.3"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -1596,7 +1596,22 @@ local function do_macro(sub, begin)
 										end
 									end
 
-									local key_line = sub[bere]
+									user_var.bere_line = bere
+
+									--注释bere行
+									if user_var.effect:find("^beretag@") then
+										local line = sub[bere]
+										line.effect = ":"..line.effect
+										line.comment = true
+										sub[bere] = line
+									else
+										local line = sub[bere]
+										line.comment = true
+										sub[bere] = line
+									end
+
+									local key_line = user_var.deepCopy(user_var.this)
+									key_line.effect = "beretag!"..key_line.effect:sub(9)
 									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
 									local time_start, step_num, time_end = key_line.start_time, 1
 									if time_start<=0 then time_start = -400/fps end
@@ -1652,6 +1667,18 @@ local function do_macro(sub, begin)
 
 									user_var.bere_line = bere
 
+									--注释bere行
+									if user_var.effect:find("^beretag@") then
+										local line = sub[bere]
+										line.effect = ":"..line.effect
+										line.comment = true
+										sub[bere] = line
+									else
+										local line = sub[bere]
+										line.comment = true
+										sub[bere] = line
+									end
+
 									--补全tag
 									local key_line = user_var.deepCopy(user_var.this)
 									if not key_line.text:find("{.-}") then
@@ -1678,17 +1705,7 @@ local function do_macro(sub, begin)
 										key_line.text = key_line.text:sub(1,pos-1)..[[\org]]..key_line.text:match([[\pos(%([^%)]-%))]])..key_line.text:sub(pos)
 									end
 									key_line.effect = "beretag!"..key_line.effect:sub(9)
-									--处理bere行
-									if sub[bere].effect:find("^beretag@") then
-										local line = sub[bere]
-										line.effect = ":"..line.effect
-										line.comment = true
-										sub[bere] = line
-									else
-										local line = sub[bere]
-										line.comment = true
-										sub[bere] = line
-									end
+
 									--处理keytext内容
 									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
 									local time_start, step_num, time_end = key_line.start_time, 1
