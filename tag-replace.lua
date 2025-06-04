@@ -8,7 +8,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.6.3"
+script_version = "2.6.4"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -116,7 +116,7 @@ user_var={
 		end
 	end,
 	debug=function(text, to_exit)
-		local button = aegisub.dialog.display({{class="label",label=tostring(text):gsub("&", "&&")}})
+		local button = aegisub.dialog.display({{class="label",label=user_var.sanitize_utf8(tostring(text)):gsub("&", "&&")}})
 		if not button or to_exit then aegisub.cancel() end
 	end,
 	addClass=function(line, ...)
@@ -222,6 +222,100 @@ user_var={
 		end
 
 		return table.concat(result)
+	end,
+	sanitize_utf8=function(input)
+		local output = {}
+		local i = 1
+		local len = #input
+		
+		while i <= len do
+			local byte = input:byte(i)
+			
+			-- ASCII 字符 (0-127)
+			if byte < 0x80 then
+					table.insert(output, string.char(byte))
+					i = i + 1
+			
+			-- 2字节 UTF-8 字符
+			elseif byte >= 0xC2 and byte <= 0xDF then
+					if i + 1 <= len then
+						local byte2 = input:byte(i + 1)
+						if byte2 >= 0x80 and byte2 <= 0xBF then
+							table.insert(output, string.sub(input, i, i + 1))
+							i = i + 2
+						else
+							table.insert(output, "?")
+							i = i + 1
+						end
+					else
+						table.insert(output, "?")
+						i = i + 1
+					end
+			
+			-- 3字节 UTF-8 字符
+			elseif byte >= 0xE0 and byte <= 0xEF then
+					if i + 2 <= len then
+						local byte2 = input:byte(i + 1)
+						local byte3 = input:byte(i + 2)
+						if (byte2 >= 0x80 and byte2 <= 0xBF) and 
+							(byte3 >= 0x80 and byte3 <= 0xBF) then
+							-- 检查过长的编码 (overlong)
+							if byte == 0xE0 and byte2 < 0xA0 then
+									table.insert(output, "?")
+									i = i + 1
+							elseif byte == 0xED and byte2 > 0x9F then
+									table.insert(output, "?")
+									i = i + 1
+							else
+									table.insert(output, string.sub(input, i, i + 2))
+									i = i + 3
+							end
+						else
+							table.insert(output, "?")
+							i = i + 1
+						end
+					else
+						table.insert(output, "?")
+						i = i + 1
+					end
+			
+			-- 4字节 UTF-8 字符
+			elseif byte >= 0xF0 and byte <= 0xF4 then
+					if i + 3 <= len then
+						local byte2 = input:byte(i + 1)
+						local byte3 = input:byte(i + 2)
+						local byte4 = input:byte(i + 3)
+						if (byte2 >= 0x80 and byte2 <= 0xBF) and 
+							(byte3 >= 0x80 and byte3 <= 0xBF) and 
+							(byte4 >= 0x80 and byte4 <= 0xBF) then
+							-- 检查过长的编码 (overlong) 和超出范围的编码
+							if byte == 0xF0 and byte2 < 0x90 then
+									table.insert(output, "?")
+									i = i + 1
+							elseif byte == 0xF4 and byte2 > 0x8F then
+									table.insert(output, "?")
+									i = i + 1
+							else
+									table.insert(output, string.sub(input, i, i + 3))
+									i = i + 4
+							end
+						else
+							table.insert(output, "?")
+							i = i + 1
+						end
+					else
+						table.insert(output, "?")
+						i = i + 1
+					end
+			
+			-- 无效的 UTF-8 起始字节
+			else
+					table.insert(output, "?")
+					i = i + 1
+			end
+		end
+		
+		return table.concat(output)
 	end,
 
 	--后处理
@@ -973,11 +1067,27 @@ local function var_expansion(text, re_num, sub)
 		pos1, pos2 = text:find("!.-!")
 		if not pos1 then break end
 		local load_fun, err = load("return function(sub,user_var) "..text:sub(pos1+1,pos2-1).." end")
+
 		if not load_fun then
-			user_var.debug(string.format(tr"[var_expansion] Error in template line %s and beretag line %s: %s", user_var.temp_line, user_var.num, err))
-			aegisub.cancel()
+			user_var.debug(
+				string.format(tr"[var_expansion] Error in template line %s and beretag line %s: %s", user_var.temp_line, user_var.num, err),
+				true)
 		end
-		local return_str = load_fun()(sub,user_var)
+
+		local return_str, err
+
+		xpcall(
+			function ()
+				return_str = load_fun()(sub,user_var)
+			end,
+			function (e)
+				user_var.debug(debug.traceback(e, 2))
+				err = e
+			end
+		)
+
+		if err then error(err) end
+
 		if not return_str then return_str="" end
 		text = text:sub(1,pos1-1)..return_str..text:sub(pos2+1)
 	end
