@@ -43,7 +43,7 @@ user_var={
 			return start_value + factor * ((current_time ^ user_var.cuttime.accel) - 1)
 		end
 	},
-	user_xpcall=false,
+	use_xpcall=false,
 
 	--功能性
 
