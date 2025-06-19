@@ -8,7 +8,7 @@ local tr=aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.6.4"
+script_version = "2.6.5"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -43,6 +43,7 @@ user_var={
 			return start_value + factor * ((current_time ^ user_var.cuttime.accel) - 1)
 		end
 	},
+	user_xpcall=false,
 
 	--功能性
 
@@ -446,13 +447,9 @@ user_var={
 		else
 			t = t + shad[2]
 		end
-		local w, h = r - l, b - t
 
 		step = step or {}
-		step = {step[1] or w+1, step[2] or h+1}
-
-		local expand = step[3] or {}
-		expand = {expand[1] or 0, expand[2] or 0, expand[3] or 0, expand[4] or 0}
+		local expand = step[3] or {0, 0, 0, 0}
 
 		local pos_tag = {line.text:match("\\pos%(([^,]-),([^%)]-)%)")}
 		pos = pos or {}
@@ -460,14 +457,20 @@ user_var={
 		if not pos[1] or not pos[2] then user_var.debug(tr"Need position", true) end
 
 		local offset_x, offset_y = pos[1] - line.x, pos[2] - line.y
-		l, r, t, b = l - expand[1] + offset_x, r + expand[3] + offset_x, t - expand[2] + offset_y, b + expand[4] + offset_y
+		l, r, t, b =
+			l + offset_x - (expand[1] or 0),
+			r + offset_x + (expand[3] or 0),
+			t + offset_y - (expand[2] or 0),
+			b + offset_y + (expand[4] or 0)
 
-		for x = l, r, step[1] do
-			for y = t, b, step[2] do
+		local step1, step2 = step[1] or r-l+1, step[2] or b-t+1
+
+		for x = l, r, step1 do
+			for y = t, b, step2 do
 				local new_line = user_var.deepCopy(line)
 				new_line.text = string.format([[{\pos(%.2f,%.2f)\clip(%.2f,%.2f,%.2f,%.2f)}%s]],
 					pos[1], pos[2],
-					x, y, x + step[1], y + step[2],
+					x, y, x+step1, y+step2,
 					new_line.text:gsub([[\pos%([^%)]-%)]], ""))
 				local w, h = r - l, b - t
 				local x_relative, y_relative = x - l, y - t
@@ -1076,15 +1079,19 @@ local function var_expansion(text, re_num, sub)
 
 		local return_str, err
 
-		xpcall(
-			function ()
-				return_str = load_fun()(sub,user_var)
-			end,
-			function (e)
-				user_var.debug(debug.traceback(e, 2))
-				err = e
-			end
-		)
+		if user_var.user_xpcall then
+			xpcall(
+				function ()
+					return_str = load_fun()(sub,user_var)
+				end,
+				function (e)
+					user_var.debug(debug.traceback(e, 2))
+					err = e
+				end
+			)
+		else
+			return_str = load_fun()(sub,user_var)
+		end
 
 		if err then error(err) end
 
