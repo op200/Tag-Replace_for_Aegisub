@@ -1079,7 +1079,7 @@ local function var_expansion(text, re_num, sub)
 
 		local return_str, err
 
-		if user_var.user_xpcall then
+		if user_var.use_xpcall then
 			xpcall(
 				function ()
 					return_str = load_fun()(sub,user_var)
