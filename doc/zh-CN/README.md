@@ -257,6 +257,7 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
 ### 类型标注
 * line 指的是 Aegisub API 字幕行对象
 * list 指的是没有非 int key 的 table，只需用 list\[num\] 访问即可
+* tuple 指的是定长 list
 * dict 指的是纯字典的 table
 * int 指的是只有整数的 number
 * ... 指的是 Lua 的解包列表，例如 `$addLine(line1, line2, lin3)` 可以一次性添加三个对象
@@ -338,7 +339,7 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
 * #### \$colorGradient(line_info, rgba, step_set, tags, control_points, pos) -> nil
   见旧版文档
 
-* #### \$getTagCut(text: str) -> list[list[str, bool, int]]
+* #### \$getTagCut(text: str) -> tuple[list[str, bool, int]]
   输入一个字符串，返回按 tag 出现顺序切割的 table `{{text: str, is_tag: bool, num: int}, ...}`
   ```lua
   $getTagCut("1{22}333{}{}") ->
