@@ -339,7 +339,7 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
 * #### \$colorGradient(line_info, rgba, step_set, tags, control_points, pos) -> nil
   见旧版文档
 
-* #### \$getTagCut(text: str) -> tuple[list[str, bool, int]]
+* #### \$getTagCut(text: str) -> list[tuple[str, bool, int]]
   输入一个字符串，返回按 tag 出现顺序切割的 table `{{text: str, is_tag: bool, num: int}, ...}`
   ```lua
   $getTagCut("1{22}333{}{}") ->
