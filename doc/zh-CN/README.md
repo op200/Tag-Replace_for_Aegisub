@@ -170,7 +170,7 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,beretag@gradient,123456789
 
 Tag Replace 存在一些内置变量，用于方便用户操作。
 
-Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用 `$` 或 `user_var.` 作为开头，例如 `$number1`，本质上是 `$` 会被自动替换为 `user_var`。
+Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用 `$` 或 `user_var.` 作为开头，例如 `$number1`，本质上是 `$` 会被自动替换为 `user_var.`。
 
 关键字是会被直接替换的，它长得和全局变量一样，但不能真正调用到对应的变量，因为它会最优先被替换为对应值。
 
@@ -324,14 +324,14 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
 * #### \$gradient(line, callback, step, pos) -> nil
   ```lua
   @param line  
-	@param callback: function(line, position: dict, progress: list) -> nil  
-	　@position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r = y - t}  
-	　@progress: {x_fraction: list, y_fraction: list, x_percent: number, y_percent: number}  
-	@param step: list | nil  
-	　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
-	　　expand: list{number | nil} = {left, top, right, bottom}  
-	@param pos: list | nil  
-	　{x: number | nil, y: number | nil}
+  @param callback: function(line, position: dict, progress: list) -> nil  
+  　@param position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r = y - t}  
+  　@param progress: {x_fraction: list, y_fraction: list, x_percent: number, y_percent: number}  
+  @param step: list | nil  
+  　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
+  　　expand: list{number | nil} = {left, top, right, bottom}  
+  @param pos: list | nil  
+  　{x: number | nil, y: number | nil}
   ```
   `x_percent` 和 `y_percent` 取值范围是 `[0, 100]`。  
   生成的新行直接插入到 `$subcache`。
