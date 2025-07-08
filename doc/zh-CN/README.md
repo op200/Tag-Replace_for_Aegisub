@@ -149,10 +149,17 @@ Dialogue: 0,0:00:00.00,0:00:05.00,zh-top,,0,0,0,beretag@dialog,编辑字幕\NEdi
 
 演示使用 `$gradient` 制作完全自定义的渐变效果
 ```lua
-Comment: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,template@gradient#onlyfind;uninsert;recache;append,!local function callback(line, pos, prog) local c1, c2, c3, c4 = "&H11FF00&", "&HFF43D6&", "&HFFA500&", "&H00FCFF&" local gc1, gc2 = util.interpolate_color(prog[3] / 100, c1, c2), util.interpolate_color(prog[3] / 100, c3, c4) line.text = [[{\c]] .. util.interpolate_color(prog[4] / 100, gc1, gc2) .. "}" .. line.text end $gradient($this, callback, {6, 6})!
+Comment: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,template@gradient#onlyfind;uninsert;recache;append,!local c1, c2, c3, c4 = "&H11FF00&", "&HFF43D6&", "&HFFA500&", "&H00FCFF&" local function callback(line, pos, prog) local gc1, gc2 = util.interpolate_color(prog[3] / 100, c1, c2), util.interpolate_color(prog[3] / 100, c3, c4) local gc = util.interpolate_color(prog[4] / 100, gc1, gc2) line.text = string.format([[{\pos(%s,%s)\c%s}%s]], line.x + math.floor(prog[4]), line.y, gc, line.text) end $gradient($this, callback, {8, 6, {nil, nil, 70}})!
 Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,beretag@gradient,123456789
 ```
 ![图片加载失败](img/005.webp)
+
+如果你只想对颜色和透明度做渐变，可以使用更简洁的 `$gradientColor` 函数
+```lua
+Comment: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,template@gradient#onlyfind;uninsert;recache;append,!$gradientColor($this, {"&HFF11FF00&", "&HFFFF43D6&", "&H00FFA500&", "&H0000FCFF&"}, {"c", "3c", "1a"}, {8, 3, {nil, -20, 10, -10}})!
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,beretag@gradient,123456789
+```
+![图片加载失败](img/006.webp)
 
 
 
@@ -189,7 +196,9 @@ Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用
 * #### \$this
   当前 bere 行的 karaskel 处理后的只读副本，用于方便访问bere行的属性  
   同时允许 `$` 直接访问 `$this` 的属性，例如 `$start_time` `$top`  
-  额外给 `$this` 增加了一个整数成员属性 `$this.num`，是其 Aegisub 中用户看到的行号
+  额外给 `$this` 增加了一个整数成员属性 `$this.num`，是其 Aegisub 中用户看到的行号  
+  额外增加 `$start_frame` `$end_frame` 代表对应帧数  
+  额外增加 `$bere_num` `$exp_num` 代表对应替换次数
 
 
 * #### \$progress={0,0}
@@ -200,6 +209,9 @@ Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用
   待插入的字幕行列表。  
   可使用 `table.insert($subcache, line)` 手动插入行，或 `addLine(line)` 自动插入深拷贝
 
+* #### \$msg: list\[str\]
+  待插入的字符串行列表  
+  执行结束后会插入到字幕行的头部
 
 * #### \$kdur / user_var.kdur={0,0}
   这是 `\k` 标签后跟的值，可以在替换 karaok 标签时使用。  
@@ -287,6 +299,9 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
 * #### \$addLine(...: line) -> nil
   向 `$subcache` 中插入 `$deepCopy(line)`
 
+* #### \$addMsg(...: str) -> nil
+  向 `$msg` 中插入字符串
+
 * #### \$ms2f(ms: number) -> int
   根据载入的视频，将毫秒数转为帧数
 
@@ -336,8 +351,11 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
   `x_percent` 和 `y_percent` 取值范围是 `[0, 100]`。  
   生成的新行直接插入到 `$subcache`。
 
+* #### \$gradientColor(line, tags, step, pos) -> nil
+  
+
 * #### \$colorGradient(line_info, rgba, step_set, tags, control_points, pos) -> nil
-  见旧版文档
+  已弃用的函数，现由 `$gradientColor` 代替，具体用法见旧版文档（Github Wiki）
 
 * #### \$getTagCut(text: str) -> list[tuple[str, bool, int]]
   输入一个字符串，返回按 tag 出现顺序切割的 table `{{text: str, is_tag: bool, num: int}, ...}`

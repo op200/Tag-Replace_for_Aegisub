@@ -1,14 +1,15 @@
-﻿require("karaskel")
-local util = require("aegisub.util")
-local ffi = require("ffi")
-local bit = require("bit")
+﻿require"karaskel"
+local util = require"aegisub.util"
+local ffi = require"ffi"
+local bit = require"bit"
+local re = require"aegisub.re"
 
-local tr=aegisub.gettext
+local tr = aegisub.gettext
 
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.6.5"
+script_version = "2.7.0"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -24,6 +25,7 @@ user_var={
 	sub,
 	progress={0,0},
 	subcache={},
+	msg={},
 	kdur={0,0},--存储方式为前缀和，从[2]开始计数，方便相对值计算
 	begin=false,
 	temp_line=false,
@@ -160,8 +162,13 @@ user_var={
 		line.effect = "beretag@" .. table.concat(new_class, ";")
 	end,
 	addLine=function(...)
-		for _,line in pairs({select(1, ...)}) do
+		for _,line in ipairs({select(1, ...)}) do
 			table.insert(user_var.subcache, user_var.deepCopy(line))
+		end
+	end,
+	addMsg=function(...)
+		for _,msg in ipairs({select(1, ...)}) do
+			table.insert(user_var.msg, user_var.deepCopy(msg))
 		end
 	end,
 	ms2f=function(ms)
@@ -385,13 +392,67 @@ user_var={
 			end
 		end
 
+		karaskel.preproc_line_text(meta, styles, line)
 		karaskel.preproc_line_size(meta, styles, line)
 		karaskel.preproc_line_pos(meta, styles, line)
+
+		-- 重新计算宽高
+		local line_break_num = 0
+		for _ in line.text:gmatch([[\N]]) do
+			line_break_num = line_break_num + 1
+		end
+		if line.text:find([[\N$]]) then
+			line_break_num = line_break_num - 1
+		end
+
+		if line_break_num == 0 then
+			return
+		end
+
+		local new_height, new_width = 0, 0
+
+		for t in (line.text..[[\N]]):gmatch([[(.-)\N]]) do
+			local new_line = user_var.deepCopy(line)
+			new_line.text = t
+
+			if t == "" then
+				new_line.text = " "
+				user_var.rePreLine(new_line)
+				new_height = new_height + new_line.height / 2
+			else
+				user_var.rePreLine(new_line)
+				new_height = new_height + new_line.height
+			end
+
+			if new_line.width > new_width then
+				new_width = new_line.width
+			end
+		end
+
+		line.height, line.width = new_height, new_width
+
+		if line.halign == "center" then
+			local half_w = new_width / 2
+			line.left, line.right = line.x - half_w, line.x + half_w
+		elseif line.halign == "left" then
+			line.right = line.left + new_width
+		else
+			line.left = line.right - new_width
+		end
+
+		if line.valign == "bottom" then
+			line.top = line.bottom - new_height
+		elseif line.valign == "top" then
+			line.bottom = line.top + new_height
+		else
+			local half_h = new_height / 2
+			line.top, line.bottom = line.y - half_h, line.y + half_h
+		end
 	end,
 	--- @param line table  
 	--- @param callback function(line, position: dict, progress: list) -> nil  
-	--- 　@position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r}  
-	--- 　@progress: {x_fraction: list, y_fraction, x_percent: number, y_percent}  
+	--- 　@param position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r}  
+	--- 　@param progress: {x_fraction: list, y_fraction, x_percent: number, y_percent}  
 	--- @param step table<number | nil> | nil  
 	--- 　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
 	--- 　　expand: list{number | nil} = {left, top, right, bottom}  
@@ -487,7 +548,82 @@ user_var={
 			end
 		end
 	end,
+	--- @param line table  
+	--- @param colors table<string>
+	--- @param tags table<string>
+	--- @param step table<number | nil> | nil  
+	--- 　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
+	--- 　　expand: list{number | nil} = {left, top, right, bottom}  
+	--- @param pos table<number | nil> | nil  
+	--- 　{x: number | nil, y: number | nil}  
+	--- @return nil -- insert subcache
+	gradientColor=function(line, colors, tags, step, pos)
+		if #colors ~= 4 then
+			user_var.debug(string.format(tr"Parameter '%s' length not %d", "colors", 4), true)
+		end
+
+		local r1, g1, b1, a1 = util.extract_color(colors[1])
+		local r2, g2, b2, a2 = util.extract_color(colors[2])
+		local r3, g3, b3, a3 = util.extract_color(colors[3])
+		local r4, g4, b4, a4 = util.extract_color(colors[4])
+		if not (r1 and g1 and b1 and a1) then
+			user_var.debug(string.format(tr"The format of string '%s' is invalid", "colors[1]"), true)
+		end
+		if not (r2 and g2 and b2 and a2) then
+			user_var.debug(string.format(tr"The format of string '%s' is invalid", "colors[2]"), true)
+		end
+		if not (r3 and g3 and b3 and a3) then
+			user_var.debug(string.format(tr"The format of string '%s' is invalid", "colors[3]"), true)
+		end
+		if not (r4 and g4 and b4 and a4) then
+			user_var.debug(string.format(tr"The format of string '%s' is invalid", "colors[4]"), true)
+		end
+
+		local c_format_str = ""
+		local a_format_str = ""
+		for _, tag in pairs(tags) do
+			if tag:find("a") then
+				a_format_str = a_format_str .. "\\" .. tag .. "%s"
+			else
+				c_format_str = c_format_str .. "\\" .. tag .. "%s"
+			end
+		end
+
+		local function tags_format(c_str, a_str)
+			return "{" .. c_format_str:gsub("%%s", c_str) .. a_format_str:gsub("%%s", a_str) .. "}"
+		end
+
+		user_var.gradient(line,
+		function(line, _, prog)
+			local prog1, prog2 = prog[4] / 100, prog[3] / 100
+
+			local r = util.interpolate(
+				prog1,
+				util.interpolate(prog2, r1, r2),
+				util.interpolate(prog2, r3, r4)
+			)
+			local g = util.interpolate(
+				prog1,
+				util.interpolate(prog2, g1, g2),
+				util.interpolate(prog2, g3, g4)
+			)
+			local b = util.interpolate(
+				prog1,
+				util.interpolate(prog2, b1, b2),
+				util.interpolate(prog2, b3, b4)
+			)
+			local a = util.interpolate(
+				prog1,
+				util.interpolate(prog2, a1, a2),
+				util.interpolate(prog2, a3, a4)
+			)
+
+			line.text = tags_format(util.ass_color(r, g, b), util.ass_alpha(a)) .. line.text
+		end,
+		step, pos)
+	end,
 	colorGradient=function(line_info, rgba, step_set, tags, control_points, pos)
+		user_var.addMsg(string.format(tr"This is a deprecated function: %s", "$colorGradient"))
 		-- 计算组合数
 		math.comb = function(n, k)
 			if k > n then return 0 end
@@ -2110,6 +2246,17 @@ local function do_macro(sub, begin)
 		else
 			i = i+1
 		end
+	end
+
+	-- 插入 msg
+	local msg_line = sub[begin]
+	msg_line.comment, msg_line.effect = true, "beretag! Tag Replace Message"
+	msg_line.style, msg_line.text = "", ""
+	msg_line.start_time, msg_line.end_time = 0, 0
+	for _, msg in ipairs(user_var.msg) do
+		local line = user_var.deepCopy(msg_line)
+		line.text = msg
+		sub[-begin] = line
 	end
 end
 
