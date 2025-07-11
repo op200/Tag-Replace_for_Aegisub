@@ -9,7 +9,7 @@ local tr = aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.7.0"
+script_version = "2.7.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -1069,6 +1069,7 @@ local function initialize(sub,begin)
 
 		if sub[findline].effect:find("^beretag!") then--删除beretag!行
 			sub.delete(findline)
+			_this_line = nil
 		elseif sub[findline].effect:find("^:beretag@") then--还原:beretag@行
 			local new_line=sub[findline]
 			new_line.comment=false
@@ -1550,6 +1551,7 @@ local function do_replace(sub, bere, mode)--return int
 		--这里插入和删除的顺序不能更改，否则会导致逆天bug
 		local add_line_num = _do_insert(bere+1,insert_line)
 		sub.delete(bere)
+		_this_line = nil
 		if mode.append and bere < user_var.temp_line then
 			user_var.temp_line=user_var.temp_line-1
 		end
@@ -1633,7 +1635,7 @@ local function do_macro(sub, begin)
 
 					--插入
 					if mode.append then
-						for i,v in ipairs(mix_table) do
+						for _,v in ipairs(mix_table) do
 							sub[0]=v
 						end
 					else
@@ -1648,88 +1650,38 @@ local function do_macro(sub, begin)
 						local new=sub[i]
 						if new.comment and new.effect:find("^beretag!") then
 							sub.delete(i)
+							_this_line = nil
 						else
 							i=i+1
 						end
 					end
 				elseif mode.onlyfind then
-					if mode.strictstyle then
-						if mode.strictactor then
-							while bere <= #sub - append_num do
-								if sub[user_var.temp_line].style == sub[bere].style and sub[user_var.temp_line].actor == sub[bere].actor
-								   and not sub[bere].comment and sub[bere].effect:find("^beretag[@!]")
-								   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass)
-								then
-									user_var.bere_line = bere
-									var_expansion(sub[user_var.temp_line].text, 2, sub)
-									if mode.uninsert then
-										local new_line = sub[bere]
-										if new_line.effect:find("^beretag@") then
-											new_line.comment = true
-											new_line.effect = ":" .. new_line.effect
-											sub[bere] = new_line
-										end
-									end
+					while bere <= #sub - append_num do
+						user_var.bere_line = bere
+						if not user_var.comment and user_var.effect:find("^beretag[@!]")
+							and cmp_class(sub[user_var.temp_line].effect, user_var.effect, mode.strictclass)
+							and (
+								not mode.strictstyle
+								or sub[user_var.temp_line].style == user_var.style)
+							and (
+								not mode.strictactor
+								or sub[user_var.temp_line].actor == user_var.actor)
+						then
+							var_expansion(sub[user_var.temp_line].text, 2, sub)
+							if mode.uninsert then
+								local new_line = sub[bere]
+								if new_line.effect:sub(8,8) == '@' then
+									new_line.comment = true
+									new_line.effect = ":" .. new_line.effect
+									sub[bere] = new_line
+								else
+									sub.delete(bere)
+									_this_line = nil
+									bere = bere - 1
 								end
-								bere = bere + 1
-							end
-						else
-							while bere <= #sub - append_num do
-								if sub[user_var.temp_line].style == sub[bere].style
-								   and not sub[bere].comment and sub[bere].effect:find("^beretag[@!]")
-								   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass)
-								then
-									user_var.bere_line = bere
-									var_expansion(sub[user_var.temp_line].text, 2, sub)
-									if mode.uninsert then
-										local new_line = sub[bere]
-										if new_line.effect:find("^beretag@") then
-											new_line.comment = true
-											new_line.effect = ":" .. new_line.effect
-											sub[bere] = new_line
-										end
-									end
-								end
-								bere = bere + 1
 							end
 						end
-					elseif mode.strictactor then
-						while bere <= #sub - append_num do
-							if sub[user_var.temp_line].actor == sub[bere].actor
-							   and not sub[bere].comment and sub[bere].effect:find("^beretag[@!]")
-							   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass)
-							then
-								user_var.bere_line = bere
-								var_expansion(sub[user_var.temp_line].text, 2, sub)
-								if mode.uninsert then
-									local new_line = sub[bere]
-									if new_line.effect:find("^beretag@") then
-										new_line.comment = true
-										new_line.effect = ":" .. new_line.effect
-										sub[bere] = new_line
-									end
-								end
-							end
-							bere = bere + 1
-						end
-					else
-						while bere <= #sub - append_num do
-							if not sub[bere].comment and sub[bere].effect:find("^beretag[@!]")
-							   and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass)
-							then
-								user_var.bere_line = bere
-								var_expansion(sub[user_var.temp_line].text, 2, sub)
-								if mode.uninsert then
-									local new_line = sub[bere]
-									if new_line.effect:find("^beretag@") then
-										new_line.comment = true
-										new_line.effect = ":" .. new_line.effect
-										sub[bere] = new_line
-									end
-								end
-							end
-							bere = bere + 1
-						end
+						bere = bere + 1
 					end
 				else
 					--先 (keyframe) 后 替换
@@ -2169,6 +2121,7 @@ local function do_macro(sub, begin)
 							end
 							bere = bere+1
 						end
+						_this_line = nil
 						bere = begin
 
 						user_var.keytext, user_var.keyclip = "", ""
