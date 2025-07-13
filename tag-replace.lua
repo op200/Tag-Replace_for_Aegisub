@@ -9,7 +9,7 @@ local tr = aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.7.1"
+script_version = "2.7.2"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -1006,12 +1006,14 @@ user_var={
 local _this_line, _this_index_time = nil, 0
 setmetatable(user_var, {
 	__index = function(t, k)
-		if _this_index_time > 2	 or not t.bere_line then
+		if _this_index_time > 2 or not t.bere_line then
 			_this_index_time = 0
 			return nil
 		elseif k == "this" then
 			local num = t.bere_line - user_var.begin + 1
-			if _this_line and _this_line.num == num then return _this_line end
+			if _this_line and _this_line.num == num then
+				return _this_line
+			end
 			_this_line = t.sub[t.bere_line]
 			setmetatable(_this_line, {
 				__index = function(_, _k)
@@ -1061,23 +1063,22 @@ local function initialize(sub,begin)
 	user_var = user_var_org.deepCopy(user_var_org)
 	_this_line = nil
 
-	local findline=begin
+	local findline = begin
 	aegisub.progress.title(tr"Tag Replace - Initializing")
-	while findline<=#sub do
+	while findline <= #sub do
 		if aegisub.progress.is_cancelled() then aegisub.cancel() end
-		aegisub.progress.set(100*findline/#sub)
+		aegisub.progress.set(100 * findline / #sub)
 
-		if sub[findline].effect:find("^beretag!") then--删除beretag!行
+		if sub[findline].effect:find("^beretag!") then --删除beretag!行
 			sub.delete(findline)
-			_this_line = nil
-		elseif sub[findline].effect:find("^:beretag@") then--还原:beretag@行
-			local new_line=sub[findline]
-			new_line.comment=false
-			new_line.effect=new_line.effect:sub(2)
-			sub[findline]=new_line
-			findline=findline+1
+		elseif sub[findline].effect:find("^:beretag@") then --还原:beretag@行
+			local new_line = sub[findline]
+			new_line.comment = false
+			new_line.effect = new_line.effect:sub(2)
+			sub[findline] = new_line
+			findline = findline + 1
 		else
-			findline=findline+1
+			findline = findline + 1
 		end
 	end
 end
@@ -1241,8 +1242,9 @@ end
 local append_num
 
 local function do_replace(sub, bere, mode)--return int
-	if sub[bere].comment or not sub[bere].effect:find("^beretag[@!]") then return 1 end--若该行被注释或为非beretag行，则跳过
-	if not cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass) then return 1 end--判断该行class是否与模板行class有交集
+	if user_var.this.comment or not user_var.this.effect:find("^beretag[@!]") then return 1 end--若该行被注释或为非beretag行，则跳过
+	local temp_line_now = sub[user_var.temp_line]
+	if not cmp_class(temp_line_now.effect, user_var.this.effect, mode.strictclass) then return 1 end--判断该行class是否与模板行class有交集
 	--准备replace
 	user_var.bere_num = user_var.bere_num + 1
 	local insert_line, insert_table=sub[bere], {}
@@ -1259,7 +1261,7 @@ local function do_replace(sub, bere, mode)--return int
 	end
 	--执行replace
 	--根据mode判断替换方式
-	local temp_tag, temp_add_tail = sub[user_var.temp_line].text:match("^{(.-)}"), sub[user_var.temp_line].text:match("^{.-}(.*)")
+	local temp_tag, temp_add_tail = temp_line_now.text:match("^{(.-)}"), temp_line_now.text:match("^{.-}(.*)")
 	local temp_re_tag, temp_add_text = temp_add_tail:match("^{(.-)}"), temp_add_tail:match("^{.-}(.*)")
 
 	local find_pos, re_num=1, 2 --re_num从2开始计数
@@ -1395,16 +1397,16 @@ local function do_replace(sub, bere, mode)--return int
 			end
 		end
 
-		local function _getTag(current_time,total_time,value_table,end_value_table)
-			local result=""
+		local function _getTag(current_time, total_time, value_table, end_value_table)
+			local result = ""
 
-			for i=1,#value_table do
-				if #value_table[i][2]==1 then
-					result = result.."\\"..value_table[i][1].._typeChange(_valueCalculation(current_time, total_time, value_table[i], 1), value_table[i][3])
+			for i = 1, #value_table do
+				if #value_table[i][2] == 1 then
+					result = result.."\\"..value_table[i][1] .. _typeChange(_valueCalculation(current_time, total_time, value_table[i], 1), value_table[i][3])
 				else
 					local str=""
 					for p=1,#value_table[i][2] do
-						str=str.._typeChange(_valueCalculation(current_time, total_time, value_table[i], p), value_table[i][3])..","
+						str = str .. _typeChange(_valueCalculation(current_time, total_time, value_table[i], p), value_table[i][3])..","
 					end
 					result = result.."\\"..value_table[i][1].."("..str:sub(1,-2)..")"
 				end
@@ -1418,11 +1420,11 @@ local function do_replace(sub, bere, mode)--return int
 			local total_time = end_f-start_f
 			for i=1,total_time do
 				local line = user_var.deepCopy(insert_line)
-				line.effect = "beretag!"..line.effect:sub(9)
+				line.effect = "beretag!" .. line.effect:sub(9)
 				line.start_time = user_var.f2ms(start_f+i-1)
 				line.end_time = user_var.f2ms(start_f+i)
-				line.text = _getTag(i,total_time,value_table,end_value_table)..line.text
-				table.insert(insert_table,line)
+				line.text = _getTag(i, total_time, value_table, end_value_table) .. line.text
+				table.insert(insert_table, line)
 			end
 		else
 			local total_time = math.ceil((insert_line.end_time - insert_line.start_time)*fps/1000)
@@ -1438,8 +1440,8 @@ local function do_replace(sub, bere, mode)--return int
 					now_time=insert_line.end_time
 				end
 				line.end_time = now_time
-				line.text = _getTag(i,total_time,value_table,end_value_table)..line.text
-				table.insert(insert_table,line)
+				line.text = _getTag(i, total_time, value_table, end_value_table) .. line.text
+				table.insert(insert_table, line)
 			end
 		end
 	else
@@ -1457,8 +1459,8 @@ local function do_replace(sub, bere, mode)--return int
 				user_var.bere_text = insert_line.text:sub(pos1,pos2)
 				user_var.bere_match = find_list
 
-				find_pos = pos2 + 1 - insert_line.text:len()--先减原长再加新长，防止出现正则表达式导致的字数不同问题
-				insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_add_tail,re_num,sub)..insert_line.text:sub(pos2+1)--插入temp_add_tail
+				find_pos = pos2 + 1 - insert_line.text:len() --先减原长再加新长，防止出现正则表达式导致的字数不同问题
+				insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_add_tail,re_num,sub)..insert_line.text:sub(pos2+1) --插入temp_add_tail
 				find_pos = find_pos + insert_line.text:len()
 
 				re_num = re_num+1
@@ -1470,13 +1472,13 @@ local function do_replace(sub, bere, mode)--return int
 				user_var.bere_text = insert_line.text:sub(pos1,pos2)
 				user_var.bere_match = find_list
 				--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
-				local pos3 = insert_line.text:find("}",pos2+1)--记录temp_tag后的}的位置
+				local pos3 = insert_line.text:find("}",pos2+1) --记录temp_tag后的}的位置
 
-				local new_temp_add_text=var_expansion(temp_add_text,re_num,sub)
-				insert_line.text = insert_line.text:sub(1,pos3)..new_temp_add_text..insert_line.text:sub(pos3+1)--插入new_temp_add_text
-				pos3 = pos3 + new_temp_add_text:len() - insert_line.text:len()--因为temp_tag含有正则表达式，无法直接获取长度，所以pos3先减原长，循环结束时再加新长
+				local new_temp_add_text = var_expansion(temp_add_text,re_num,sub)
+				insert_line.text = insert_line.text:sub(1,pos3)..new_temp_add_text .. insert_line.text:sub(pos3+1) --插入new_temp_add_text
+				pos3 = pos3 + new_temp_add_text:len() - insert_line.text:len() --因为temp_tag含有正则表达式，无法直接获取长度，所以pos3先减原长，循环结束时再加新长
 
-				insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_re_tag,re_num,sub)..insert_line.text:sub(pos2+1)--插入temp_re_tag
+				insert_line.text = insert_line.text:sub(1,pos1-1) .. var_expansion(temp_re_tag,re_num,sub) .. insert_line.text:sub(pos2+1) --插入temp_re_tag
 				
 				find_pos = insert_line.text:find("{", pos3 + insert_line.text:len() + 1)
 				if not find_pos then break end
@@ -1495,9 +1497,9 @@ local function do_replace(sub, bere, mode)--return int
 		local postProc = user_var.postProc
 
 		if mode.cuttime then
-			local i=1
+			local i = 1
 			if mode.append then
-				while i<=#insert_table do
+				while i <= #insert_table do
 					insert_content = insert_table[i]
 					postProc(insert_content)
 					sub[0] = insert_content
@@ -1505,13 +1507,13 @@ local function do_replace(sub, bere, mode)--return int
 				end
 				return 1
 			else
-				while i<=#insert_table do
+				while i <= #insert_table do
 					insert_content = insert_table[i]
 					postProc(insert_content)
 					sub.insert(pos+i-1,insert_content)
-					i = i+1
+					i = i + 1
 				end
-				return i-1
+				return i - 1
 			end
 		end
 
@@ -1553,55 +1555,58 @@ local function do_replace(sub, bere, mode)--return int
 		sub.delete(bere)
 		_this_line = nil
 		if mode.append and bere < user_var.temp_line then
-			user_var.temp_line=user_var.temp_line-1
+			user_var.temp_line = user_var.temp_line - 1
 		end
 		return add_line_num
 	end
 	--注释行，并在effect头部加上:
-	local tocmt=sub[bere]
-	tocmt.comment=true
-	tocmt.effect=":"..tocmt.effect
-	sub[bere]=tocmt
+	local tocmt = sub[bere]
+	tocmt.comment = true
+	tocmt.effect = ":"..tocmt.effect
+	sub[bere] = tocmt
 	--将@改为!
-	insert_line.effect="beretag!"..insert_line.effect:sub(9)
-	local add_line_num = _do_insert(bere+1,insert_line)
-	return add_line_num+1
+	insert_line.effect = "beretag!" .. insert_line.effect:sub(9)
+	local add_line_num = _do_insert(bere + 1, insert_line)
+	return add_line_num + 1
 end
 
 local function find_event(sub)
-	for i=1,#sub do
-		if sub[i].section=="[Events]" then
+	for i = 1, #sub do
+		if sub[i].section == "[Events]" then
 			return i
 		end
 	end
 end
 
 local function do_macro(sub, begin)
-	user_var.temp_line=begin
-	user_var.sub=sub
-	user_var.begin=begin
-	append_num=0--初始化append边界
+	user_var.temp_line = begin
+	user_var.sub = sub
+	user_var.begin = begin
+
+	append_num = 0 --初始化append边界
 	aegisub.progress.title(tr"Tag Replace - Replace")
 	for i = begin, #sub do
 		if sub[i].effect:find("^template") and sub[i].comment then
 			user_var.progress[2] = user_var.progress[2] + 1
 		end
 	end
+
 	while user_var.temp_line<=#sub do
 		--Find template lines. 检索模板行
-		if sub[user_var.temp_line].comment then
+		local temp_line_now = sub[user_var.temp_line]
+		if temp_line_now.comment then
 			if aegisub.progress.is_cancelled() then aegisub.cancel() end
 			aegisub.progress.set(100 * user_var.progress[1] / math.max(user_var.progress[2], 1))
 			user_var.progress[1] = user_var.progress[1] + 1
 
-			if sub[user_var.temp_line].effect:find("^template@[^#]-#.*$") then
-				local mode = get_mode(sub[user_var.temp_line].effect)
+			if temp_line_now.effect:find("^template@[^#]-#.*$") then
+				local mode = get_mode(temp_line_now.effect)
 				local bere = begin
 				--根据mode判断
 				if mode.classmix then
 					local first_table,second_table = {},{}
 					local to_comment
-					local temp_line = sub[user_var.temp_line]
+					local temp_line = temp_line_now
 					local first_class, second_class, new_class = temp_line.text:match("^{(.-)}{(.-)}{(.-)}")
 					for bere = begin, #sub - append_num do
 						local bere_line = sub[bere]
@@ -1659,15 +1664,15 @@ local function do_macro(sub, begin)
 					while bere <= #sub - append_num do
 						user_var.bere_line = bere
 						if not user_var.comment and user_var.effect:find("^beretag[@!]")
-							and cmp_class(sub[user_var.temp_line].effect, user_var.effect, mode.strictclass)
+							and cmp_class(temp_line_now.effect, user_var.effect, mode.strictclass)
 							and (
 								not mode.strictstyle
-								or sub[user_var.temp_line].style == user_var.style)
+								or temp_line_now.style == user_var.style)
 							and (
 								not mode.strictactor
-								or sub[user_var.temp_line].actor == user_var.actor)
+								or temp_line_now.actor == user_var.actor)
 						then
-							var_expansion(sub[user_var.temp_line].text, 2, sub)
+							var_expansion(temp_line_now.text, 2, sub)
 							if mode.uninsert then
 								local new_line = sub[bere]
 								if new_line.effect:sub(8,8) == '@' then
@@ -1692,10 +1697,10 @@ local function do_macro(sub, begin)
 						end
 						local find_end = #sub
 						while bere<=find_end do--找到bere行
-							if not sub[bere].comment and sub[bere].effect:find("^beretag[@!]")
-								and cmp_class(sub[user_var.temp_line].effect,sub[bere].effect, mode.strictclass) 
-								and (not mode.strictactor or sub[user_var.temp_line].actor==sub[bere].actor)
-								and (not mode.strictstyle or sub[user_var.temp_line].style==sub[bere].style)
+							if not user_var.this.comment and user_var.this.effect:find("^beretag[@!]")
+								and cmp_class(temp_line_now.effect, user_var.this.effect, mode.strictclass) 
+								and (not mode.strictactor or temp_line_now.actor == user_var.this.actor)
+								and (not mode.strictstyle or temp_line_now.style == user_var.this.style)
 								then
 
 								local insert_key_line
@@ -1765,22 +1770,22 @@ local function do_macro(sub, begin)
 								end
 
 								if (user_var.keytext=="" or not user_var.keytext)
-									and user_var.keyclip~="" and user_var.keyclip
+									and user_var.keyclip ~= "" and user_var.keyclip
 									then -- 只有clip的情况
 
 									--处理keyclip内容
 									local key_clip_point_table = {}
 									local key_clip_table = {}
-									for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table,line) end
+									for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table, line) end
 
 									if key_clip_table[1] ~= "shake_shape_data 4.0" then
 										user_var.debug([[The $keyclip "]]..tostring(key_clip_table[1])..[[" is not supported]])
 									end
 
 									local height = select(1,karaskel.collect_head(user_var.sub)).res_y
-									for _,line in ipairs(key_clip_table) do
-										if line:sub(1,11)=="vertex_data" then
-											line=line:sub(13)
+									for _, line in ipairs(key_clip_table) do
+										if line:sub(1,11) == "vertex_data" then
+											line = line:sub(13)
 
 											--坐标转换
 											local coords = {}
@@ -1797,7 +1802,7 @@ local function do_macro(sub, begin)
 
 											local _,pos2=line:find("^[^ ]- [^ ]- ")
 											table.insert(key_clip_point_table,
-												[[{\clip(m ]]..line:sub(0,pos2).."l"..line:sub(pos2)..")}")
+												[[{\clip(m ]]..line:sub(0, pos2).."l"..line:sub(pos2)..")}")
 										end
 									end
 
@@ -1815,22 +1820,22 @@ local function do_macro(sub, begin)
 										sub[bere] = line
 									end
 
-									local key_line = user_var.deepCopy(user_var.this)
+									local key_line = sub[user_var.bere_line]
 									key_line.effect = "beretag!"..key_line.effect:sub(9)
 									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
 									local time_start, step_num, time_end = key_line.start_time, 1
-									if time_start<=0 then time_start = -400/fps end
+									if time_start <= 0 then time_start = -400/fps end
 									time_end = time_start
 									local key_clip_point_table_len = #key_clip_point_table
 									if mode.append then
-										for i=1,key_clip_point_table_len do
+										for i = 1, key_clip_point_table_len do
 											insert_key_line = key_line
 											insert_key_line.text = key_clip_point_table[i] .. insert_key_line.text
 
 											insert_key_line.start_time = time_end
-											time_end = time_start + step_num*1000/fps
+											time_end = time_start + step_num * 1000 / fps
 											insert_key_line.end_time = time_end
-											step_num = step_num+1
+											step_num = step_num + 1
 
 											insert_key_line.text = insert_key_line.text
 												:gsub([[\fad%([^%)]+%)]], gsub_callback_tag_fad)
@@ -1841,15 +1846,15 @@ local function do_macro(sub, begin)
 											sub[0] = insert_key_line
 										end
 									else
-										local insert_pos = bere+1
+										local insert_pos = bere + 1
 										for i=1,key_clip_point_table_len do
 											local insert_key_line = key_line
 											insert_key_line.text = key_clip_point_table[i] .. insert_key_line.text
 
 											insert_key_line.start_time = time_end
-											time_end = time_start + step_num*1000/fps
+											time_end = time_start + step_num * 1000 / fps
 											insert_key_line.end_time = time_end
-											step_num = step_num+1
+											step_num = step_num + 1
 
 											insert_key_line.text = insert_key_line.text
 												:gsub([[\fad%([^%)]+%)]], gsub_callback_tag_fad)
@@ -1867,13 +1872,13 @@ local function do_macro(sub, begin)
 								else
 
 									if key_text_table[1] ~= "Adobe After Effects 6.0 Keyframe Data" then
-										user_var.debug([[The $keytext "]]..tostring(key_text_table[1])..[[" is not supported]], true)
+										user_var.debug(string.format(tr[[The $keytext "%s" is not supported]], tostring(key_text_table[1])), true)
 									end
 
 									user_var.bere_line = bere
 
 									--注释bere行
-									if user_var.effect:find("^beretag@") then
+									if user_var.this.effect:find("^beretag@") then
 										local line = sub[bere]
 										line.effect = ":"..line.effect
 										line.comment = true
@@ -1885,7 +1890,7 @@ local function do_macro(sub, begin)
 									end
 
 									--补全tag
-									local key_line = user_var.deepCopy(user_var.this)
+									local key_line = sub[bere]
 									if not key_line.text:find("{.-}") then
 										key_line.text = "{}"..key_line.text
 									end
@@ -1914,31 +1919,31 @@ local function do_macro(sub, begin)
 									--处理keytext内容
 									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
 									local time_start, step_num, time_end = key_line.start_time, 1
-									if time_start<=0 then time_start = -400/fps end
+									if time_start <= 0 then time_start = -400/fps end
 									local key_text_table_pos = 2
-									while key_text_table[key_text_table_pos]~=[[	Frame	X pixels	Y pixels	Z pixels]] do
+									while key_text_table[key_text_table_pos] ~= [[	Frame	X pixels	Y pixels	Z pixels]] do
 										key_text_table_pos=key_text_table_pos+1
 									end
 									key_text_table_pos=key_text_table_pos+1
 
 									local key_pos, key_scale, key_rot = {},{},{}
-									while key_text_table[key_text_table_pos]~="Scale" do--read Position
-										table.insert(key_pos,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
-										key_text_table_pos=key_text_table_pos+1
+									while key_text_table[key_text_table_pos] ~= "Scale" do --read Position
+										table.insert(key_pos, {key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
+										key_text_table_pos = key_text_table_pos + 1
 									end
-									key_text_table_pos=key_text_table_pos+2
-									while key_text_table[key_text_table_pos]~="Rotation" do--read Scale
-										table.insert(key_scale,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
-										key_text_table_pos=key_text_table_pos+1
+									key_text_table_pos = key_text_table_pos+2
+									while key_text_table[key_text_table_pos] ~= "Rotation" do --read Scale
+										table.insert(key_scale, {key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
+										key_text_table_pos = key_text_table_pos + 1
 									end
-									key_text_table_pos=key_text_table_pos+2
-									while key_text_table[key_text_table_pos]~="End of Keyframe Data" do--read Rotation
-										table.insert(key_rot,{key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)")})
-										key_text_table_pos=key_text_table_pos+1
+									key_text_table_pos = key_text_table_pos+2
+									while key_text_table[key_text_table_pos] ~= "End of Keyframe Data" do --read Rotation
+										table.insert(key_rot, {key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)")})
+										key_text_table_pos = key_text_table_pos + 1
 									end
 									--处理keyclip内容
 									local key_clip_point_table = {}
-									if user_var.keyclip~="" and user_var.keyclip then
+									if user_var.keyclip ~= "" and user_var.keyclip then
 										local key_clip_table = {}
 										for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table,line) end
 
@@ -1946,9 +1951,9 @@ local function do_macro(sub, begin)
 											user_var.debug([["]]..key_clip_table[1]..[[" is not supported]])
 										end
 
-										local height = select(1,karaskel.collect_head(user_var.sub)).res_y
-										for _,line in ipairs(key_clip_table) do
-											if line:sub(1,11)=="vertex_data" then
+										local height = select(1, karaskel.collect_head(user_var.sub)).res_y
+										for _, line in ipairs(key_clip_table) do
+											if line:sub(1, 11) == "vertex_data" then
 												line=line:sub(13)
 
 												--坐标转换
@@ -1956,74 +1961,74 @@ local function do_macro(sub, begin)
 												for x, y in string.gmatch(line, "([^ ]-) ([^ ]-) ") do
 													table.insert(coords, {tonumber(x), tonumber(y)})
 												end
-												for i, coord in ipairs(coords) do
+												for _, coord in ipairs(coords) do
 													coord[2] = height - coord[2]
 												end
-												line=""
+												line = ""
 												for _, coord in ipairs(coords) do
 													line = line..string.format("%.2f %.2f ", coord[1], coord[2])
 												end
 
-												local _,pos2=line:find("^[^ ]- [^ ]- ")
+												local _, pos2 = line:find("^[^ ]- [^ ]- ")
 												table.insert(key_clip_point_table,
-													[[{\clip(m ]]..line:sub(0,pos2).."l"..line:sub(pos2)..")}")
+													[[{\clip(m ]]..line:sub(0, pos2).."l"..line:sub(pos2)..")}")
 											end
 										end
 									end
-									for i=#key_clip_point_table+1,#key_rot do
-										key_clip_point_table[i]=""
+									for i = #key_clip_point_table + 1, #key_rot do
+										key_clip_point_table[i] = ""
 									end
 									--开始插入行
-									local x,y,fx,fy,fz,ox,oy
+									local x, y, fx, fy, fz, ox, oy
 									local pos_table, out_value = {1,#key_line.text}, {}
 									
 									local pos1,pos2 = key_line.text:find([[\pos%([^,]-,]])
-									x = key_line.text:sub(pos1+5,pos2-1)
-									table.insert(out_value,{pos1,x,key_pos,1})
-									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2)
+									x = key_line.text:sub(pos1+5, pos2-1)
+									table.insert(out_value, {pos1, x, key_pos, 1})
+									table.insert(pos_table, pos1+4) table.insert(pos_table, pos2)
 
-									pos1,pos2 = key_line.text:find([[,[^,]-%)]],pos2)
-									y = key_line.text:sub(pos1+1,pos2-1)
-									table.insert(out_value,{pos1,y,key_pos,2})
-									table.insert(pos_table,pos1) table.insert(pos_table,pos2)
+									pos1, pos2 = key_line.text:find([[,[^,]-%)]], pos2)
+									y = key_line.text:sub(pos1+1, pos2-1)
+									table.insert(out_value, {pos1, y, key_pos, 2})
+									table.insert(pos_table, pos1) table.insert(pos_table, pos2)
 
-									pos1,pos2 = key_line.text:find([[\fscx[%d%.]+]])
-									fx = key_line.text:sub(pos1+5,pos2)
-									table.insert(out_value,{pos1,fx,key_scale,1})
-									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2+1)
+									pos1, pos2 = key_line.text:find([[\fscx[%d%.]+]])
+									fx = key_line.text:sub(pos1+5, pos2)
+									table.insert(out_value, {pos1, fx, key_scale, 1})
+									table.insert(pos_table, pos1+4) table.insert(pos_table, pos2+1)
 
-									pos1,pos2 = key_line.text:find([[\fscy[%d%.]+]])
-									fy = key_line.text:sub(pos1+5,pos2)
-									table.insert(out_value,{pos1,fy,key_scale,2})
-									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2+1)
+									pos1, pos2 = key_line.text:find([[\fscy[%d%.]+]])
+									fy = key_line.text:sub(pos1+5, pos2)
+									table.insert(out_value, {pos1, fy, key_scale, 2})
+									table.insert(pos_table, pos1+4) table.insert(pos_table, pos2+1)
 
-									pos1,pos2 = key_line.text:find([[\frz%-?[%d%.]+]])
-									fz = key_line.text:sub(pos1+4,pos2)
-									table.insert(out_value,{pos1,fz,key_rot,1})
-									table.insert(pos_table,pos1+3) table.insert(pos_table,pos2+1)
+									pos1, pos2 = key_line.text:find([[\frz%-?[%d%.]+]])
+									fz = key_line.text:sub(pos1+4, pos2)
+									table.insert(out_value, {pos1, fz, key_rot, 1})
+									table.insert(pos_table, pos1+3) table.insert(pos_table, pos2+1)
 									
-									pos1,pos2 = key_line.text:find([[\org%([^,]-,]])
-									ox = key_line.text:sub(pos1+5,pos2-1)
-									table.insert(out_value,{pos1,ox,key_pos,1})
-									table.insert(pos_table,pos1+4) table.insert(pos_table,pos2)
+									pos1, pos2 = key_line.text:find([[\org%([^,]-,]])
+									ox = key_line.text:sub(pos1+5, pos2-1)
+									table.insert(out_value, {pos1, ox, key_pos, 1})
+									table.insert(pos_table, pos1+4) table.insert(pos_table, pos2)
 
-									pos1,pos2 = key_line.text:find([[,[^,]-%)]],pos2)
-									oy = key_line.text:sub(pos1+1,pos2-1)
-									table.insert(out_value,{pos1,oy,key_pos,2})
-									table.insert(pos_table,pos1) table.insert(pos_table,pos2)
+									pos1, pos2 = key_line.text:find([[,[^,]-%)]],pos2)
+									oy = key_line.text:sub(pos1+1, pos2-1)
+									table.insert(out_value, {pos1, oy, key_pos, 2})
+									table.insert(pos_table, pos1) table.insert(pos_table, pos2)
 									
 
 									table.sort(out_value, function(a,b) return a[1] < b[1] end) table.sort(pos_table)
 
 									local insert_key_line_table = {
-										key_line.text:sub(pos_table[1],pos_table[2]),
-										key_line.text:sub(pos_table[3],pos_table[4]),
-										key_line.text:sub(pos_table[5],pos_table[6]),
-										key_line.text:sub(pos_table[7],pos_table[8]),
-										key_line.text:sub(pos_table[9],pos_table[10]),
-										key_line.text:sub(pos_table[11],pos_table[12]),
-										key_line.text:sub(pos_table[13],pos_table[14]),
-										key_line.text:sub(pos_table[15],pos_table[16])
+										key_line.text:sub(pos_table[ 1], pos_table[ 2]),
+										key_line.text:sub(pos_table[ 3], pos_table[ 4]),
+										key_line.text:sub(pos_table[ 5], pos_table[ 6]),
+										key_line.text:sub(pos_table[ 7], pos_table[ 8]),
+										key_line.text:sub(pos_table[ 9], pos_table[10]),
+										key_line.text:sub(pos_table[11], pos_table[12]),
+										key_line.text:sub(pos_table[13], pos_table[14]),
+										key_line.text:sub(pos_table[15], pos_table[16])
 									}
 									--根据mode插入
 									local function key_line_value(num,i)
@@ -2049,17 +2054,17 @@ local function do_macro(sub, begin)
 									time_end = time_start
 									local key_rot_len = #key_rot
 									if mode.append then
-										for i=1,key_rot_len do
+										for i = 1, key_rot_len do
 											insert_key_line = key_line
 											insert_key_line.text =
 												key_clip_point_table[i] ..
-												key_line_value(1,i) ..
-												key_line_value(2,i) ..
-												key_line_value(3,i) ..
-												key_line_value(4,i) ..
-												key_line_value(5,i) ..
-												key_line_value(6,i) ..
-												key_line_value(7,i) ..
+												key_line_value(1, i) ..
+												key_line_value(2, i) ..
+												key_line_value(3, i) ..
+												key_line_value(4, i) ..
+												key_line_value(5, i) ..
+												key_line_value(6, i) ..
+												key_line_value(7, i) ..
 												insert_key_line_table[8]
 
 											insert_key_line.start_time = time_end
@@ -2072,26 +2077,26 @@ local function do_macro(sub, begin)
 												:gsub([[\fade%([^%)]+%)]], gsub_callback_tag_fade)
 												:gsub([[\t%([^%)]+%)]], gsub_callback_tag_t)
 
-											user_var.keyProc(insert_key_line, {i,key_rot_len})
+											user_var.keyProc(insert_key_line, {i, key_rot_len})
 											sub[0] = insert_key_line
 										end
 									else
-										local insert_pos = bere+1
-										for i=1,key_rot_len do
+										local insert_pos = bere + 1
+										for i = 1, key_rot_len do
 											insert_key_line = key_line
 											insert_key_line.text =
 												key_clip_point_table[i] ..
-												key_line_value(1,i) ..
-												key_line_value(2,i) ..
-												key_line_value(3,i) ..
-												key_line_value(4,i) ..
-												key_line_value(5,i) ..
-												key_line_value(6,i) ..
-												key_line_value(7,i) ..
+												key_line_value(1, i) ..
+												key_line_value(2, i) ..
+												key_line_value(3, i) ..
+												key_line_value(4, i) ..
+												key_line_value(5, i) ..
+												key_line_value(6, i) ..
+												key_line_value(7, i) ..
 												insert_key_line_table[8]
 
 											insert_key_line.start_time = time_end
-											time_end = time_start + step_num*1000/fps
+											time_end = time_start + step_num * 1000 / fps
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
 
@@ -2100,8 +2105,8 @@ local function do_macro(sub, begin)
 												:gsub([[\fade%([^%)]+%)]], gsub_callback_tag_fade)
 												:gsub([[\t%([^%)]+%)]], gsub_callback_tag_t)
 
-											user_var.keyProc(insert_key_line, {i,key_rot_len})
-											sub.insert(insert_pos,insert_key_line)
+											user_var.keyProc(insert_key_line, {i, key_rot_len})
+											sub.insert(insert_pos, insert_key_line)
 											insert_pos = insert_pos+1
 										end
 										find_end = find_end + insert_pos - bere - 1
@@ -2111,15 +2116,15 @@ local function do_macro(sub, begin)
 								end
 							end
 							--next
-							bere = bere+1
+							bere = bere + 1
 						end
 						--end
 						bere = begin
 						while bere <= #sub do
-							if sub[bere].effect:find("^beretag!") and sub[bere].comment then
+							if user_var.this.effect:find("^beretag!") and user_var.this.comment then
 								sub.delete(bere)
 							end
-							bere = bere+1
+							bere = bere + 1
 						end
 						_this_line = nil
 						bere = begin
@@ -2128,12 +2133,11 @@ local function do_macro(sub, begin)
 					end
 					--先 keyframe 后 (替换)
 					while bere <= #sub - append_num do
-						if (
-								not mode.strictstyle
-								or sub[user_var.temp_line].style == sub[bere].style)
-							and (
-								not mode.strictactor
-								or sub[user_var.temp_line].actor == sub[bere].actor)
+						if (not mode.strictstyle
+								or temp_line_now.style == user_var.this.style)
+							and
+							(not mode.strictactor
+								or temp_line_now.actor == user_var.this.actor)
 							then
 							user_var.bere_line = bere
 							bere = bere + do_replace(sub, bere, mode)
@@ -2143,61 +2147,61 @@ local function do_macro(sub, begin)
 					end
 				end
 				if mode.recache and #user_var.subcache > 0 then--插入缓存行
-					for i=1,#user_var.subcache do
+					for i = 1, #user_var.subcache do
 						user_var.subcache[i].effect = "beretag!"..user_var.subcache[i].effect:sub(9)
 					end
 					if mode.append then
-						for i,v in ipairs(user_var.subcache) do
+						for _, v in ipairs(user_var.subcache) do
 							sub[0]=v
 						end
 					else
-						for i,v in ipairs(user_var.subcache) do
+						for i, v in ipairs(user_var.subcache) do
 							sub.insert(user_var.temp_line+i,v)
 						end
 					end
-					user_var.subcache={}
+					user_var.subcache = {}
 				end
 			end
 		--检索命令行
-			if sub[user_var.temp_line].effect:find("^template#")
-				and not get_mode(sub[user_var.temp_line].effect).pre
+			if temp_line_now.effect:find("^template#")
+				and not get_mode(temp_line_now.effect).pre
 				then
-				var_expansion(sub[user_var.temp_line].text, 2, sub)
-				if #user_var.subcache > 0 then--插入缓存行
-					local mode = get_mode(sub[user_var.temp_line].effect)
+				var_expansion(temp_line_now.text, 2, sub)
+				if #user_var.subcache > 0 then --插入缓存行
+					local mode = get_mode(temp_line_now.effect)
 					if mode.recache then
-						for i=1,#user_var.subcache do
+						for i = 1, #user_var.subcache do
 							user_var.subcache[i].effect = "beretag!"..user_var.subcache[i].effect:sub(9)
 						end
 						if mode.append then
-							for i,v in ipairs(user_var.subcache) do
+							for _, v in ipairs(user_var.subcache) do
 								sub[0]=v
 							end
 						else
-							for i,v in ipairs(user_var.subcache) do
-								sub.insert(user_var.temp_line+i,v)
+							for i, v in ipairs(user_var.subcache) do
+								sub.insert(user_var.temp_line + i, v)
 							end
 						end
-						user_var.subcache={}
+						user_var.subcache = {}
 					end
 				end
 			end
-			append_num=0--还原append边界
+			append_num = 0 --还原append边界
 		end
-		user_var.temp_line = user_var.temp_line + 1
-		user_var.bere_line = false
-		user_var.bere_text = ""
+		user_var.temp_line  = user_var.temp_line + 1
+		user_var.bere_line  = false
+		user_var.bere_text  = ""
 		user_var.bere_match = {}
-		user_var.bere_num = 0
+		user_var.bere_num   = 0
 	end
 
 	--删除所有空的 beretag! 行
-	local i=begin
+	local i = begin
 	while i <= #sub do
 		if sub[i].effect:find("^beretag!") and not sub[i].comment and sub[i].text=="" then
 			sub.delete(i)
 		else
-			i = i+1
+			i = i + 1
 		end
 	end
 
@@ -2215,7 +2219,7 @@ end
 
 local function pre_template_line(sub, begin)
 	aegisub.progress.title(tr"Tag Replace - Exp pre line")
-	for i=begin,#sub do
+	for i = begin, #sub do
 		local line = sub[i]
 		if line.comment and line.effect:find("^template#") and get_mode(line.effect).pre then
 			var_expansion(line.text, 2, sub)
@@ -2241,7 +2245,7 @@ local function comment_template_line(sub, selected_table)
 end
 
 local function uncomment_template_line(sub)
-	for i=find_event(sub),#sub do
+	for i = find_event(sub), #sub do
 		local line = sub[i]
 		if line.effect:find("^:template") then
 			line.effect = line.effect:sub(2)
@@ -2253,14 +2257,14 @@ end
 --Execute Macro in selected lines. 在所选行执行宏
 local function macro_processing_function_selected(subtitles, selected_lines)
 	local begin = find_event(subtitles)
-	initialize(subtitles,begin)
+	initialize(subtitles, begin)
 	pre_template_line(subtitles, begin)
 	--搜索所有非所选的template行，对其中注释行头部添加:，执行完后再还原
-	local selected_table={}
+	local selected_table = {}
 	for i,v in ipairs(selected_lines) do
-		selected_table[tostring(v)]=true
+		selected_table[tostring(v)] = true
 	end
-	comment_template_line(subtitles,selected_table)
+	comment_template_line(subtitles, selected_table)
 	do_macro(subtitles, begin)
 	uncomment_template_line(subtitles)
 end
