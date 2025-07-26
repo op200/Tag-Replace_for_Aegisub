@@ -9,7 +9,7 @@ local tr = aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.7.2"
+script_version = "2.7.3"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -1469,12 +1469,12 @@ local function do_replace(sub, bere, mode)--return int
 				local pos1, pos2 = find_list[1], find_list[2]
 				if not pos1 then break end
 				table.remove(find_list, 1) table.remove(find_list, 1)
-				user_var.bere_text = insert_line.text:sub(pos1,pos2)
+				user_var.bere_text = insert_line.text:sub(pos1, pos2)
 				user_var.bere_match = find_list
 				--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
-				local pos3 = insert_line.text:find("}",pos2+1) --记录temp_tag后的}的位置
+				local pos3 = insert_line.text:find("}", pos2+1) --记录temp_tag后的}的位置
 
-				local new_temp_add_text = var_expansion(temp_add_text,re_num,sub)
+				local new_temp_add_text = var_expansion(temp_add_text, re_num, sub)
 				insert_line.text = insert_line.text:sub(1,pos3)..new_temp_add_text .. insert_line.text:sub(pos3+1) --插入new_temp_add_text
 				pos3 = pos3 + new_temp_add_text:len() - insert_line.text:len() --因为temp_tag含有正则表达式，无法直接获取长度，所以pos3先减原长，循环结束时再加新长
 
@@ -1591,7 +1591,7 @@ local function do_macro(sub, begin)
 		end
 	end
 
-	while user_var.temp_line<=#sub do
+	while user_var.temp_line <= #sub do
 		--Find template lines. 检索模板行
 		local temp_line_now = sub[user_var.temp_line]
 		if temp_line_now.comment then
@@ -1606,11 +1606,10 @@ local function do_macro(sub, begin)
 				if mode.classmix then
 					local first_table,second_table = {},{}
 					local to_comment
-					local temp_line = temp_line_now
-					local first_class, second_class, new_class = temp_line.text:match("^{(.-)}{(.-)}{(.-)}")
+					local first_class, second_class, new_class = temp_line_now.text:match("^{(.-)}{(.-)}{(.-)}")
 					for bere = begin, #sub - append_num do
 						local bere_line = sub[bere]
-						if (not mode.strictstyle or temp_line.style == bere_line.style) and (not mode.strictactor or temp_line.actor == bere_line.actor) and cmp_class(temp_line.effect,bere_line.effect, mode.strictclass) then
+						if (not mode.strictstyle or temp_line_now.style == bere_line.style) and (not mode.strictactor or temp_line_now.actor == bere_line.actor) and cmp_class(temp_line_now.effect,bere_line.effect, mode.strictclass) then
 							to_comment = false
 							if cmp_class('@'..first_class..'#',bere_line.effect, mode.strictclass) then
 								table.insert(first_table, user_var.deepCopy(bere_line))
@@ -1696,7 +1695,8 @@ local function do_macro(sub, begin)
 							for line in user_var.keytext:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_text_table,line) end
 						end
 						local find_end = #sub
-						while bere<=find_end do--找到bere行
+						while bere <= find_end do--找到bere行
+							user_var.bere_line = bere
 							if not user_var.this.comment and user_var.this.effect:find("^beretag[@!]")
 								and cmp_class(temp_line_now.effect, user_var.this.effect, mode.strictclass) 
 								and (not mode.strictactor or temp_line_now.actor == user_var.this.actor)
@@ -1806,10 +1806,8 @@ local function do_macro(sub, begin)
 										end
 									end
 
-									user_var.bere_line = bere
-
 									--注释bere行
-									if user_var.effect:find("^beretag@") then
+									if user_var.this.effect:find("^beretag@") then
 										local line = sub[bere]
 										line.effect = ":"..line.effect
 										line.comment = true
@@ -1890,7 +1888,7 @@ local function do_macro(sub, begin)
 									end
 
 									--补全tag
-									local key_line = sub[bere]
+									local key_line = user_var.deepCopy(user_var.this) --必须复制处理后的行，后面要使用新属性
 									if not key_line.text:find("{.-}") then
 										key_line.text = "{}"..key_line.text
 									end
@@ -2133,13 +2131,13 @@ local function do_macro(sub, begin)
 					end
 					--先 keyframe 后 (替换)
 					while bere <= #sub - append_num do
+						user_var.bere_line = bere
 						if (not mode.strictstyle
 								or temp_line_now.style == user_var.this.style)
 							and
 							(not mode.strictactor
 								or temp_line_now.actor == user_var.this.actor)
 							then
-							user_var.bere_line = bere
 							bere = bere + do_replace(sub, bere, mode)
 						else
 							bere = bere + 1
@@ -2175,7 +2173,7 @@ local function do_macro(sub, begin)
 						end
 						if mode.append then
 							for _, v in ipairs(user_var.subcache) do
-								sub[0]=v
+								sub[0] = v
 							end
 						else
 							for i, v in ipairs(user_var.subcache) do
