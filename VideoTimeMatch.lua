@@ -1,7 +1,7 @@
-﻿local gt=aegisub.gettext
+﻿local tr=aegisub.gettext
 
-script_name = gt"Video Time Match"
-script_description = gt"According to frame difference from two videos to match time. (Aegisub must load this video, the FPS of both videos must be the same and must be CFR)"
+script_name = tr"Video Time Match"
+script_description = tr"According to frame difference from two videos to match time. (Aegisub must load this video, the FPS of both videos must be the same and must be CFR)"
 script_author = "op200"
 script_version = "0.3"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
@@ -23,11 +23,11 @@ local time_table = {}
 
 local function get_time_table()
 	local button, input = aegisub.dialog.display({
-		{name='entry', height=4, width=5, class='textbox', hint=gt"Enter manually here"},
-		{name='select', y=4, width=5, class='dropdown', items={gt"Manual entry", gt"Auto run VideoMatch"}, value=gt"Manual entry", hint=gt"If manual entry, use the textbox's content, else then run VideoMatch.exe"},
-		{name='video1', y=5, width=5, class='edit', hint=gt"Enter video path 1 here"},
-		{name='video2', y=6, width=5, class='edit', hint=gt"Enter video path 2 here"},
-		{name='option', y=7, width=5, class='edit', text="-scale 4", hint=gt"Enter additional options here"}
+		{name='entry', height=4, width=5, class='textbox', hint=tr"Enter manually here"},
+		{name='select', y=4, width=5, class='dropdown', items={tr"Manual entry", tr"Auto run VideoMatch"}, value=tr"Manual entry", hint=tr"If manual entry, use the textbox's content, else then run VideoMatch.exe"},
+		{name='video1', y=5, width=5, class='edit', hint=tr"Enter video path 1 here"},
+		{name='video2', y=6, width=5, class='edit', hint=tr"Enter video path 2 here"},
+		{name='option', y=7, width=5, class='edit', text="-scale 4", hint=tr"Enter additional options here"}
 	})
 	if not button then aegisub.cancel() end
 

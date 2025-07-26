@@ -1,9 +1,9 @@
-﻿local gt=aegisub.gettext
+﻿local tr=aegisub.gettext
 
-script_name = gt"闪轴检测"
-script_description = gt"标记出所有闪轴行"
+script_name = tr"闪轴检测"
+script_description = tr"标记出所有闪轴行"
 script_author = "op200"
-script_version = "0.1"
+script_version = "0.1.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -36,7 +36,7 @@ local function do_macro(sub)
 	repeat
 		line_num=line_num+1
 
-		difference = sub[line_num].start_time - sub[line_num-1].end_time
+		local difference = sub[line_num].start_time - sub[line_num-1].end_time
 		if difference ~= 0 and difference < 350 and difference > -50 then
 			local new_line=sub[line_num-1]
 			new_line.actor = new_line.actor.."mayFlash"
@@ -58,5 +58,5 @@ local function macro_processing_function_initialize(subtitles)--初始化
 end
 
 
-aegisub.register_macro(gt"检测闪轴", gt"标记出可能为闪轴的行", macro_processing_function)
-aegisub.register_macro(gt"清除闪轴标记", gt"清除闪轴标记", macro_processing_function_initialize)
+aegisub.register_macro(tr"检测闪轴", tr"标记出可能为闪轴的行", macro_processing_function)
+aegisub.register_macro(tr"清除闪轴标记", tr"清除闪轴标记", macro_processing_function_initialize)

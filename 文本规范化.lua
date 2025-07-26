@@ -1,7 +1,7 @@
-﻿local gt=aegisub.gettext
+﻿local tr=aegisub.gettext
 
-script_name = gt"文本规范化"
-script_description = gt"按自定义标准规范化文本"
+script_name = tr"文本规范化"
+script_description = tr"按自定义标准规范化文本"
 script_author = "op200"
 script_version = "0.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
@@ -103,4 +103,4 @@ end
 
 
 aegisub.register_macro(script_name, script_description, macro_processing_function)
-aegisub.register_macro(gt"清除文本规范化标记", gt"清除文本规范化标记", macro_processing_function_initialize)
+aegisub.register_macro(tr"清除文本规范化标记", tr"清除文本规范化标记", macro_processing_function_initialize)
