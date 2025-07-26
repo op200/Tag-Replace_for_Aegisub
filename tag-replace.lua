@@ -9,7 +9,7 @@ local tr = aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.7.3"
+script_version = "2.7.4"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 local function get_class() end
@@ -1896,15 +1896,15 @@ local function do_macro(sub, begin)
 										local pos = key_line.text:find("}")
 										key_line.text = key_line.text:sub(1,pos-1)..string.format([[\pos(%.2f,%.2f)]], key_line.x, key_line.y)..key_line.text:sub(pos)
 									end
-									if not user_var.text:find([[\fscx%d]]) then
+									if not user_var.text:find([=[\fscx[%d%.]]=]) then
 										local pos = key_line.text:find("}")
 										key_line.text = key_line.text:sub(1,pos-1)..[[\fscx100]]..key_line.text:sub(pos)
 									end
-									if not user_var.text:find([[\fscy%d]]) then
+									if not user_var.text:find([=[\fscy[%d%.]]=]) then
 										local pos = key_line.text:find("}")
 										key_line.text = key_line.text:sub(1,pos-1)..[[\fscy100]]..key_line.text:sub(pos)
 									end
-									if not user_var.text:find([[\frz%-?%d]]) then
+									if not user_var.text:find([=[\frz%-?[%d%.]]=]) then
 										local pos = key_line.text:find("}")
 										key_line.text = key_line.text:sub(1,pos-1)..[[\frz0]]..key_line.text:sub(pos)
 									end
