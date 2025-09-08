@@ -15,11 +15,7 @@
     ],
     "Lua.diagnostics.disable": [
         "cast-local-type",
-        "unbalanced-assignments",
-        "undefined-global",
-        "redundant-parameter",
         "param-type-mismatch",
-        "need-check-nil",
-        "assign-type-mismatch"
+        "need-check-nil"
     ]
 }

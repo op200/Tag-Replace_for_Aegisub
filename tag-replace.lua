@@ -9,10 +9,9 @@ local tr = aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.7.4"
+script_version = "2.7.5"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
-local function get_class() end
 
 local base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 local base64_reverse = {}
@@ -20,9 +19,25 @@ for i = 1, #base64_chars do
 	base64_reverse[base64_chars:sub(i, i)] = i - 1
 end
 
+local function get_class(effect, is_temp)
+	local class={}
+	if is_temp then
+		for word in effect:match("@([^#]*)#"):gmatch("[^;]+") do
+			table.insert(class,word)
+		end
+	else
+		if effect:find("^beretag[@!]") then
+			for word in effect:sub(9):gmatch("[^;]+") do
+				table.insert(class,word)
+			end
+		end
+	end
+	return class
+end
+
 local user_var--自定义变量键值表
 user_var={
-	sub,
+	sub=nil,
 	progress={0,0},
 	subcache={},
 	msg={},
@@ -126,11 +141,11 @@ user_var={
 		if not line.effect:find("^beretag@.") then user_var.debug(tr"Must beretag") return end
 		local class = get_class(line.effect, false)
 		local new_class = {select(1, ...)}
-		for _,v in pairs(new_class) do
+		for _, v in pairs(new_class) do
 			table.insert(class, v)
 		end
 		local class_dict = {}
-		for _,v in pairs(class) do
+		for _, v in pairs(class) do
 			class_dict[v] = true
 		end
 		class = {}
@@ -1083,22 +1098,6 @@ local function initialize(sub,begin)
 	end
 end
 
-get_class = function(effect,is_temp)
-	local class={}
-	if is_temp then
-		for word in effect:match("@([^#]*)#"):gmatch("[^;]+") do
-			table.insert(class,word)
-		end
-	else
-		if effect:find("^beretag[@!]") then
-			for word in effect:sub(9):gmatch("[^;]+") do
-				table.insert(class,word)
-			end
-		end
-	end
-	return class
-end
-
 local function cmp_class(temp_effct, bere_effct, strict)
 	local temp_class=get_class(temp_effct,true)
 
@@ -1709,7 +1708,11 @@ local function do_macro(sub, begin)
 
 								local function gsub_callback_tag_fad(match)
 									local t1, t2 = match:match("%(([^,]+),([^%)]+)%)")
-									t1, t2 = math.floor(tonumber(t1)), math.floor(tonumber(t2))
+									t1, t2 = tonumber(t1), tonumber(t2)
+									if t1 == nil or t2 == nil then
+										user_var.debug(string.format(tr"Not a number: %s", "\\fad in line "..user_var.num), true)
+									end
+									t1, t2 = math.floor(t1), math.floor(t2)
 
 									local duration = math.floor(user_var.end_time - user_var.start_time)
 									local t = insert_key_line.start_time - user_var.start_time
@@ -1821,7 +1824,7 @@ local function do_macro(sub, begin)
 									local key_line = sub[user_var.bere_line]
 									key_line.effect = "beretag!"..key_line.effect:sub(9)
 									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
-									local time_start, step_num, time_end = key_line.start_time, 1
+									local time_start, step_num, time_end = key_line.start_time, 1, nil
 									if time_start <= 0 then time_start = -400/fps end
 									time_end = time_start
 									local key_clip_point_table_len = #key_clip_point_table
@@ -1916,7 +1919,7 @@ local function do_macro(sub, begin)
 
 									--处理keytext内容
 									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
-									local time_start, step_num, time_end = key_line.start_time, 1
+									local time_start, step_num, time_end = key_line.start_time, 1, nil
 									if time_start <= 0 then time_start = -400/fps end
 									local key_text_table_pos = 2
 									while key_text_table[key_text_table_pos] ~= [[	Frame	X pixels	Y pixels	Z pixels]] do
