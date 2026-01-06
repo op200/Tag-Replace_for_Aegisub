@@ -3,7 +3,7 @@
         "editor.tabSize": 3,
         "editor.formatOnSave": false,
         "editor.formatOnType": false,
-        "editor.defaultFormatter": "Don't format"
+        "editor.defaultFormatter": "Don't format",
     },
     "Lua.diagnostics.globals": [
         "script_description",
@@ -11,11 +11,6 @@
         "script_name",
         "script_author",
         "script_version",
-        "karaskel"
+        "karaskel",
     ],
-    "Lua.diagnostics.disable": [
-        "cast-local-type",
-        "param-type-mismatch",
-        "need-check-nil"
-    ]
 }

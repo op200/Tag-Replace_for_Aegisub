@@ -3,11 +3,13 @@
 ### Aegisub 自动载入脚本
 
 #### 安装版
+
 将lua文件放到 `C:\Program Files\Aegisub\automation\autoload` 中
 
 如果 Aegisub 安装在非默认位置，则同便携版
 
 #### 便携版
+
 将lua文件放到 `.\automation\autoload` 中
 
 ### 使用
@@ -22,12 +24,11 @@
 
 ![图片加载失败](img/002.webp)
 
-4. 执行后，第二行被注释掉了，新出现了第三行，且第三行的 `tag1` 被替换成了 `tag2`  
+1. 执行后，第二行被注释掉了，新出现了第三行，且第三行的 `tag1` 被替换成了 `tag2`  
     这就是 `Tag Replace` 最底层的功能——替换标签
 
-5. 执行脚本的清理功能，字幕还原成了原本的样子。  
+2. 执行脚本的清理功能，字幕还原成了原本的样子。  
     这就是 `Tag Replace` 的核心思想——随时重载+完全可逆。
-
 
 # 模式
 
@@ -42,59 +43,72 @@ temp行的 `#` 后跟的是模式名。
 
 ### 模式名
 
-* #### <空>  
+* #### <空>
+
   默认模式
 
-* #### pre  
+* #### pre
+
   仅 code 行可使用的模式，这个模式的行将在所有行之前执行，且在 仅执行所选行 时同样强制执行
 
-* #### onlyfind  
+* #### onlyfind
+
   不执行替换
 
-* #### cuttag  
+* #### cuttag
+
   将每次替换后的内容添加到新行，以被替换的{}位置作为切割点
 
-* #### strictstyle  
+* #### strictstyle
+
   严格匹配样式名(`Style`)，仅对同样式名的行执行替换
 
-* #### strictactor  
+* #### strictactor
+
   严格匹配说话人(`Name`)，仅对同说话人的行执行替换
 
-* #### strictclass  
+* #### strictclass
+
   严格匹配class，必须所有class一致才会执行
 
-* #### findtext  
+* #### findtext
+
   将匹配整行文本，而不是仅匹配标签
 
-* #### append  
+* #### append
+
   新的行将被append到所有字幕行的末尾，而不是bere行的后面
 
-* #### keyframe  
+* #### keyframe
+
   将先执行关键帧替换，对应的关键帧文本为 `$keytext`，蒙版为 `$keyclip`。  
   对应的标准分别是 `Adobe After Effects 6.0 Keyframe Data` 和 `shake_shape_data 4.0`。  
   可通过 $forcefps 修改帧率，否则根据输入的追踪数据里的帧率计算时轴。
+
   ```lua
   Comment: 0,0:13:26.48,0:13:29.48,screen,屏幕字,0,0,0,template#,!$keytext=[[这里填入关键帧文本]]!
   Comment: 0,0:13:26.48,0:13:29.48,screen,屏幕字,0,0,0,template@key#keyframe;append,{这里可以替换掉一些没用的标签，例如\fscx.*\fscy.*\frz.*\org[^%)]*%)}{}
   Comment: 0,0:13:26.48,0:13:29.48,screen,屏幕字,0,0,0,:beretag@key,{一些标签}追踪文本
   ```
 
-* #### recache  
+* #### recache
+
   将缓存行(`$subcache`)插入到字幕
 
-* #### uninsert  
+* #### uninsert
+
   将不会插入新的bere行，与 `onlyfind` 模式同时存在时，将注释原bere行。
 
-* #### cuttime  
+* #### cuttime
+
   `{<start_tag>}{<end_tag>}`  
   bere行在时域上从 start_tag 渐变到 end_tag  
   修改 $cuttime 中的成员，可切换帧模式、修改加速度、自定义处理函数
 
-* #### classmix  
+* #### classmix
+
   `{<class>[;<class>...]}{<class>[;<class>...]}[{<class>[;<class>...]}]`  
   合并两种类的行，第三个{}中是新的class
-
-
 
 ### 示例
 
@@ -133,8 +147,8 @@ Comment: 0,0:00:00.00,0:00:00.00,en-top,,0,0,0,template@dialog#findtext;strictst
 Dialogue: 0,0:00:00.00,0:00:05.00,zh,,0,0,0,beretag@dialog,一二三\None two three
 Dialogue: 0,0:00:00.00,0:00:05.00,zh-top,,0,0,0,beretag@dialog,编辑字幕\NEdit ASS
 ```
-![图片加载失败](img/003.webp)
 
+![图片加载失败](img/003.webp)
 
 #### 例2
 
@@ -144,24 +158,41 @@ Dialogue: 0,0:00:00.00,0:00:05.00,zh-top,,0,0,0,beretag@dialog,编辑字幕\NEdi
 
 ![动图加载失败](img/004.avif)
 
-
 #### 例3
 
 演示使用 `$gradient` 制作完全自定义的渐变效果
+
 ```lua
 Comment: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,template@gradient#onlyfind;uninsert;recache;append,!local c1, c2, c3, c4 = "&H11FF00&", "&HFF43D6&", "&HFFA500&", "&H00FCFF&" local function callback(line, pos, prog) local gc1, gc2 = util.interpolate_color(prog[3] / 100, c1, c2), util.interpolate_color(prog[3] / 100, c3, c4) local gc = util.interpolate_color(prog[4] / 100, gc1, gc2) line.text = string.format([[{\pos(%s,%s)\c%s}%s]], line.x + math.floor(prog[4]), line.y, gc, line.text) end $gradient($this, callback, {8, 6, {nil, nil, 70}})!
 Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,beretag@gradient,123456789
 ```
+
 ![图片加载失败](img/005.webp)
 
 如果你只想对颜色和透明度做渐变，可以使用更简洁的 `$gradientColor` 函数
+
 ```lua
 Comment: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,template@gradient#onlyfind;uninsert;recache;append,!$gradientColor($this, {"&HFF11FF00&", "&HFFFF43D6&", "&H00FFA500&", "&H0000FCFF&"}, {"c", "3c", "1a"}, {8, 3, {nil, -20, 10, -10}})!
 Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,beretag@gradient,123456789
 ```
+
 ![图片加载失败](img/006.webp)
 
+#### 例4
 
+用 AI 生成独立的有关算法的函数，让该函数具有高度自定义功能，然后手动调用这个函数，以快速实现复杂的自定义功能
+
+此案例使用 AI 生成 createBezierFunction 函数，这个函数根据设定的三次贝塞尔曲线 4 个点坐标，返回一个纯函数的三次贝塞尔曲线对象，这个返回的函数输入 x 或 y 坐标，返回对应的坐标，可以通过调用这个自定义的对象，生成坐标表
+
+案例中第一行为 AI 写的 createBezierFunction 函数，第二行为手写的自定义功能，如图所示，实现了简单的曲面
+
+```lua
+Comment: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,template#,!$createBezierFunction = function (p0, p1, p2, p3) local function bezierPoint(t) local u = 1 - t local tt = t * t local uu = u * u local uuu = uu * u local ttt = tt * t local x = uuu * p0[1] + 3 * uu * t * p1[1] + 3 * u * tt * p2[1] + ttt * p3[1] local y = uuu * p0[2] + 3 * uu * t * p1[2] + 3 * u * tt * p2[2] + ttt * p3[2] return x, y end local function solveForT(target, componentIndex, initialGuess) local t = initialGuess or 0.5 local maxIterations = 20 local tolerance = 1e-8 for i = 1, maxIterations do local u = 1 - t local tt = t * t local uu = u * u local value = u*u*u * p0[componentIndex] + 3 * uu * t * p1[componentIndex] + 3 * u * tt * p2[componentIndex] + tt*t * p3[componentIndex] local derivative = 3*uu * (p1[componentIndex] - p0[componentIndex]) + 6*u*t * (p2[componentIndex] - p1[componentIndex]) + 3*tt * (p3[componentIndex] - p2[componentIndex]) if math.abs(derivative) < 1e-12 then break end local f = target - value local delta = f / derivative t = t + delta if t < 0 then t = 0 end if t > 1 then t = 1 end if math.abs(delta) < tolerance then break end end return t end return function(input, isYInput) if isYInput then local targetY = input local solutions = {} for i = 0, 10 do local guess = i / 10 local t = solveForT(targetY, 2, guess) local x, y = bezierPoint(t) if math.abs(y - targetY) < 1e-6 then local exists = false for _, sol in ipairs(solutions) do if math.abs(sol - x) < 1e-6 then exists = true break end end if not exists then table.insert(solutions, x) end end end if #solutions == 0 then return nil, "No solution found" elseif #solutions == 1 then return solutions[1] else return solutions end else local targetX = input local solutions = {} for i = 0, 10 do local guess = i / 10 local t = solveForT(targetX, 1, guess) local x, y = bezierPoint(t) if math.abs(x - targetX) < 1e-6 then local exists = false for _, sol in ipairs(solutions) do if math.abs(sol - y) < 1e-6 then exists = true break end end if not exists then table.insert(solutions, y) end end end if #solutions == 0 then return nil, "No solution found" elseif #solutions == 1 then return solutions[1] else return solutions end end end end!
+Comment: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,template@a#uninsert;onlyfind;recache;append,!local bf = $createBezierFunction({$left-50, $top}, {$left+50, $top-100}, {$right-50, $top-100}, {$right+50, $top})   for i=math.floor($left-1),math.floor($right+1) do local line = sub[$bere_line]  line.text = string.format([[{\pos(%s,%.1f)\clip(%d,%s,%d,%s)}]], $x,bf(i),   i, 0, i+1, 1920) .. line.text $addLine(line)  end!
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,beretag@a,12afDEj
+```
+
+![图片加载失败](img/007.webp)
 
 # 表达式与变量扩展
 
@@ -170,8 +201,6 @@ Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,beretag@gradient,123456789
 可以直接使用 $ 扩展变量 `{\k%d*}{\kf$kdur}`。
 
 可以使用 `!...!` 扩展整个 Lua 语句，例如 `{\blur0}{\blur!local r=math.random(5) if r==3 then r=666 end return r!}`。
-
-
 
 # 内置变量与关键字
 
@@ -182,82 +211,96 @@ Tag Replace 的操作规范中，局部变量同 lua 语法，全局变量使用
 关键字是会被直接替换的，它长得和全局变量一样，但不能真正调用到对应的变量，因为它会最优先被替换为对应值。
 
 ### 类型标注
+
 * line 指的是 Aegisub API 字幕行对象
 * list 指的是没有非 int key 的 table，只需用 list\[num\] 访问即可
 * dict 指的是纯字典的 table
 * int 指的是只有整数的 number
 
-
 ### 内置变量与关键字
 
 * #### sub / \$sub
+
   `sub` 是使用规范中唯一允许用户调用的真正的全局变量，其与 `$sub` 一样，都是 Aegisub API 的 subtitle 对象
 
 * #### \$this
+
   当前 bere 行的 karaskel 处理后的只读副本，用于方便访问bere行的属性  
   同时允许 `$` 直接访问 `$this` 的属性，例如 `$start_time` `$top`  
   额外给 `$this` 增加了一个整数成员属性 `$this.num`，是其 Aegisub 中用户看到的行号  
   额外增加 `$start_frame` `$end_frame` 代表对应帧数  
   额外增加 `$bere_num` `$exp_num` 代表对应替换次数
 
-
 * #### \$progress={0,0}
+
   当前进度的分子分母
 
-
 * #### \$subcache
+
   待插入的字幕行列表。  
   可使用 `table.insert($subcache, line)` 手动插入行，或 `addLine(line)` 自动插入深拷贝
 
 * #### \$msg: list\[str\]
+
   待插入的字符串行列表  
   执行结束后会插入到字幕行的头部
 
 * #### \$kdur / user_var.kdur={0,0}
+
   这是 `\k` 标签后跟的值，可以在替换 karaok 标签时使用。  
   注意这是个关键字，如果需要调用其对应的变量，不能使用 `$`
 
 * #### \$start $mid $end  
+
   这几个同样是关键字，但它们与 $kdur 不同的是，它们没有对应的变量，它们是实时计算出来的。  
   可配合 `\t` 使用以实现简单的 karaok 效果
 
-
 * #### \$begin = find_event(sub)
+
   [Events]类型行的第一行，也是 Aegisub 字幕行的第一行对应的 index 号
 
 * #### \$temp_line: int
+
   当前所读取的template行的键  
   调用对应行可以用 `sub[$temp_line]`
 
 * #### \$bere_line: int
+
   当前所读取的beretag行的键  
   调用对应行可以用 `sub[$bere_line]`
 
-
 * #### \$bere_text: str
+
   当前被替换的文本
 
 * #### \$bere_match: list\[str\]
+
   匹配的文本的表
   e.g. `{\pos%((.-),(.-)%)}{\pos($bere_match[1],$bere_match[2])}`
 
 * #### \$bere_num: int
+
   单temp行匹配的对应bere行的序号，从 1 开始
 
 * #### \$exp_num: int
+
   单bere行执行的表达式扩展的序号，从 1 开始
 
-
 * #### \$forcefps: false | number = false
+
   有值时，部分模式或函数按此值计算时轴
 
 * #### \$keytext $keyclip
+
   `keyframe` 模式相关
 
 * #### \$cuttime = {frame_model: bool = true, accel: number = 1, interpolate: function}
+
   `cuttime` 模式相关
 
+* #### \$use_xpcall: bool
 
+  使用 xpcall 捕获 `!...!` 执行时的异常
 
 # 内置函数
 
@@ -265,100 +308,165 @@ Tag Replace 存在一些内置函数，用于调用特殊功能和更改模式�
 
 Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，所以使用 `$` 或 `user_var.` 作为开头，例如 `$deepCopy`，本质上是`user_var.deepCopy`。
 
-
 ### 类型标注
-* line 指的是 Aegisub API 字幕行对象
-* list 指的是没有非 int key 的 table，只需用 list\[num\] 访问即可
-* tuple 指的是定长 list
-* dict 指的是纯字典的 table
-* int 指的是只有整数的 number
-* ... 指的是 Lua 的解包列表，例如 `$addLine(line1, line2, lin3)` 可以一次性添加三个对象
 
+* `line` 指的是 Aegisub API 字幕行对象
+* `list` 指的是没有非 int key 的 table，只需用 `list[index]` 访问即可
+* `tuple` 指的是定长 list
+* `dict` 指的是纯字典的 table
+* `int` 指的是只有整数的 number
+* `...` 指的是 Lua 的解包列表，例如 `$addLine(line1, line2, lin3)` 可以一次性添加三个对象
+* `T?` 同 `T | nil`
 
 ### 功能性
 
 * #### \$deepCopy(add: table) -> table  
+
   深复制 table 类型的变量
 
 * #### \$checkVer(ver: str, is_must_equal: bool) -> nil  
+
   检查当前脚本版本是否≥指定版本，`is_must_equal` 可以强制等于
 
 * #### \$debug(text, to_exit: bool)  
+
   弹窗输入的文本，按`确定`继续，按`取消`退出执行  
   `to_exit` 为 `true` 则在执行完函数后强制退出执行
 
 * #### \$addClass(line, ...: str) -> nil  
+
   向字幕行对象添加任意个 class
 
 * #### \$delClass(line, ...: str) -> nil  
+
   删除字幕行对象中任意个 class
 
 * #### \$newClass(line, ...: str) -> nil  
+
   将字幕行对象中 class 全部替换为指定 class
 
 * #### \$addLine(...: line) -> nil
+
   向 `$subcache` 中插入 `$deepCopy(line)`
 
 * #### \$addMsg(...: str) -> nil
+
   向 `$msg` 中插入字符串
 
 * #### \$ms2f(ms: number) -> int
+
   根据载入的视频，将毫秒数转为帧数
 
 * #### \$f2ms(f: int) -> number
+
   根据载入的视频，将帧数转为毫秒数
 
 * #### \$enbase64(str) -> str
+
   将字符串编码为 base64 字符串
 
 * #### \$debase64(str) -> str
+
   将 base64 字符串解码为原字符串
 
+* #### \$each_char(str, callbacks) -> list\[str\]
+
+  迭代字符串的每个字符，返回字符列表
+
+  ```lua
+  @param str string
+  @param callbacks {
+    filter: (fun(char: string, index: integer): boolean)?,
+    map: (fun(char: string, index: integer): string)?,
+  }?
+  @return string[]
+  ```
+
+* #### \$reduce(arr, reducer, initial)
+
+  ```lua
+  @generic T, U
+  @param arr T[] 要归约的数组
+  @param reducer (fun(accumulator: U, current: T, index: integer): U)? 归约函数
+  @param initial U? 初始值
+  @return U 归约结果
+  ```
 
 ### 后处理
 
 * #### \$cuttime.interpolate(current_time, total_time, start_value, end_value, tag) -> number  
+
   cuttime 模式的后处理函数，用于自定义插值算法，默认根据 `$cuttime.accel` 计算插值
 
 * #### \$postProc(line)  
+
   一般模式的后处理函数，在执行每一行后对这行执行这个函数，默认为空函数
 
 * #### \$keyProc(line, progress)  
+
   keyframe 模式的后处理函数，默认为空函数
 
-* #### \$classmixProc(first: line, second: line, new_class: str) 
+* #### \$classmixProc(first: line, second: line, new_class: str)
+
   classmix 模式的后处理函数，默认为 class 合并算法。  
   前两项形参分别是匹配第一个和第二个 `{}` 的行，第三个形参是第三个 `{}` 中的值。
 
-
 ### 行处理
 
-* #### \$rePreLine(line, tags: str | nil) -> nil
+* #### \$rePreLine(line, tags: str?) -> nil
+
   根据头部的 ASS 样式标签重新执行 karaskel 预处理
 
 * #### \$gradient(line, callback, step, pos) -> nil
-  ```lua
-  @param line  
-  @param callback: function(line, position: dict, progress: list) -> nil  
-  　@param position: {x, y, l, r, t, b, w, h, x_r = x - l, y_r = y - t}  
-  　@param progress: {x_fraction: list, y_fraction: list, x_percent: number, y_percent: number}  
-  @param step: list | nil  
-  　{x_step: number | nil, y_step: number | nil, expand: list | nil}  
-  　　expand: list{number | nil} = {left, top, right, bottom}  
-  @param pos: list | nil  
-  　{x: number | nil, y: number | nil}
-  ```
-  `x_percent` 和 `y_percent` 取值范围是 `[0, 100]`。  
-  生成的新行直接插入到 `$subcache`。
 
-* #### \$gradientColor(line, tags, step, pos) -> nil
-  
+  ```lua
+  @param line Line
+  @param callback fun(
+    line,
+    position: {x: number; y: number; l: number; r: number; t: number; b: number; w: number; h: number; x_r: number; y_r: number;},  -- x_r = x - l, y_r = y - t
+    progress: {
+      [1]: {[1]: integer; [2]: integer;}; -- x_fraction
+      [2]: {[1]: integer; [2]: integer;}; -- y_fraction
+      [3]: number; -- x_percent
+      [4]: number; -- y_percent
+    },
+  ): nil
+  @param step {
+    [1]: number?; -- x_step
+    [2]: number?; -- y_step
+    [3]: {[1]: number?; [2]: number?; [3]: number?; [4]: number?; }?; -- expand: {numbe?...} = {left, top, right, bottom}
+  }?
+  @param pos {[1]: number?; [2]: number?;} -- {x, y} 
+  @return nil -- insert subcache
+  ```
+
+  `x_percent` 和 `y_percent` 取值范围是 `[0, 100]`
+
+  生成的新行直接插入到 `$subcache`
+
+* #### \$gradientColor(line, colors, tags, step, pos) -> nil
+
+  ```lua
+  @param line Line
+  @param colors {[1]: string; [2]: string; [3]: string; [4]: string;}
+  @param tags string[] -- e.g. {"\\c", "\\1a", "\\3c"}
+  @param step {
+    [1]: number?; -- x_step
+    [2]: number?; -- y_step
+    [3]: {[1]: number?; [2]: number?; [3]: number?; [4]: number?; }?; -- expand:   {numbe?...} = {left, top, right, bottom}
+  }? 
+  @param pos {[1]: number?; [2]: number?;} -- {x, y}
+  @return nil -- insert subcache
+  ```
 
 * #### \$colorGradient(line_info, rgba, step_set, tags, control_points, pos) -> nil
+
   已弃用的函数，现由 `$gradientColor` 代替，具体用法见旧版文档（Github Wiki）
 
 * #### \$getTagCut(text: str) -> list[tuple[str, bool, int]]
+
   输入一个字符串，返回按 tag 出现顺序切割的 table `{{text: str, is_tag: bool, num: int}, ...}`
+
   ```lua
   $getTagCut("1{22}333{}{}") ->
   {
@@ -370,21 +478,25 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
   }
   ```
 
-* #### \$posLine(line, width: number | nil) -> nil  
-  生成定位线，生成新定位线行直接插入到 `$subcache`
+* #### \$posLine(line, width: number?) -> nil  
 
+  生成定位线，生成新定位线行直接插入到 `$subcache`
 
 ### 调用外部
 
 * #### \$cmdCode(cmd: str, popen: bool) -> string | bool
+
   调用命令行，使用 popen 时返回输出结果，否则返回是否成功的 bool 值
 
 * #### \$psCode(cmd: str, popen: bool) -> string | bool
+
   调用 PowerShell，会自动预处理字符串
 
 * #### \$pyCode(cmd: str, popen: bool) -> string | bool
+
   调用 Python，会自动预处理字符串
 
 * #### \$getGlyph(char, line) -> str
+
   传入字符和对应样式的行对象，输出字符对应的 ASS 绘图代码  
   （目前处于实验性阶段，通过 powershell 调用 WPF API，效率很低）
