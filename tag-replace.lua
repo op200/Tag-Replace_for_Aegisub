@@ -11,7 +11,7 @@ local tr = aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.7.6"
+script_version = "2.7.7"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -143,7 +143,8 @@ script_version = "2.7.6"
 --- @field bottom number - 行下边缘的Y坐标，假设定义了对齐，有效边距，并且未检测到重叠。
 --- @field x number - 行的 X 坐标，适合与 \pos 配合使用，保持行的原位置。
 --- @field y number - 行的 Y 坐标，适合与 \pos 配合使用，保持行的原位置。
-
+--- -- tag replace new field
+--- @field rePreStyle (Style_table | nil)
 
 --- @class Subtitles
 --- @field n integer - 总行数，同 #sub
@@ -629,9 +630,17 @@ user_var={
 			end
 		end
 
+		-- 强制 fsp 有值，防止 aegisub.text_extents 将字体间距误认为是 fsp
+		local old_spacing = style.spacing
+		style.spacing = (old_spacing == 0) and 0.001 or old_spacing
+
 		karaskel.preproc_line_text(meta, styles, line)
 		karaskel.preproc_line_size(meta, styles, line)
 		karaskel.preproc_line_pos(meta, styles, line)
+
+		style.spacing = old_spacing
+
+		line.rePreStyle = style
 
 		-- 重新计算宽高
 		local line_break_num = 0
