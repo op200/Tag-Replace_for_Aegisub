@@ -11,7 +11,7 @@ local tr = aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.7.7"
+script_version = "2.8.0"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -137,9 +137,11 @@ script_version = "2.7.7"
 --- @field valign number - 三种竖直对齐方式 "top", "middle" 或 "bottom" 中的一种, 是由 line.styleref.align 派生出来的。
 --- @field left number - 行左边缘的 X 坐标，假设定义了对齐，有效边距，并且未检测到重叠。
 --- @field center number - 行水平中点的 X 坐标，假设定义了对齐，有效边距，并且未检测到重叠。
+--- @field hcenter number - 同 center
 --- @field right number - 行右边缘的 X 坐标，假设定义了对齐，有效边距，并且未检测到重叠。
 --- @field top number - 行上边缘的 Y 坐标，假设定义了对齐，有效边距，并且未检测到重叠。
---- @field middle number - 行竖直中点的 Y 坐标，假设定义了对齐，有效边距，并且未检测到重叠。别名line.vcenter。 line.bottom - 行下边缘的Y坐标，假设定义了对齐，有效边距，并且未检测到重叠。
+--- @field middle number - 行竖直中点的 Y 坐标，假设定义了对齐，有效边距，并且未检测到重叠。
+--- @field vcenter number - 同 middle
 --- @field bottom number - 行下边缘的Y坐标，假设定义了对齐，有效边距，并且未检测到重叠。
 --- @field x number - 行的 X 坐标，适合与 \pos 配合使用，保持行的原位置。
 --- @field y number - 行的 Y 坐标，适合与 \pos 配合使用，保持行的原位置。
@@ -590,7 +592,9 @@ user_var={
 	--- @return nil - modify line obj
 	rePreLine=function(line, tags)
 		local meta, styles = karaskel.collect_head(user_var.sub)
-		local style = styles[line.style]
+		local style = styles[line.style] --- @type Style_table
+
+		-- 重写 style
 
 		tags = tags or line.text:gsub("}{", ""):match("^{(.-)}") or ""
 
@@ -600,17 +604,17 @@ user_var={
 
 		for n, a in tags:gmatch("\\a(n?)(%d+)") do -- \an?
 			if n == 'n' then
-				style.align = tonumber(a)
+				style.align = tonumber(a) or style.align
 			else
 				style.align = ({1,2,3, 7,7,8,9, 7,4,5,6})[tonumber(a)]
 			end
 		end
 
-		for fs in tags:gmatch("\\fs(%d+%.?%d+)") do -- \fs
-			style.fontsize = tonumber(fs)
+		for fs in tags:gmatch("\\fs(%d+%.?%d*)") do -- \fs
+			style.fontsize = tonumber(fs) or style.fontsize
 		end
 
-		for c, fs in tags:gmatch("\\fs([%+%-])(%d+%.?%d+)") do -- \fs[+-]
+		for c, fs in tags:gmatch("\\fs([%+%-])(%d+%.?%d*)") do -- \fs[+-]
 			if c == '+' then
 				style.fontsize = (1 + fs / 10) * style.fontsize
 			else
@@ -618,15 +622,15 @@ user_var={
 			end
 		end
 
-		for fsp in tags:gmatch("\\fsp(%-?%d+%.?%d+)") do -- \fsp
-			style.spacing = tonumber(fsp)
+		for fsp in tags:gmatch("\\fsp(%-?%d+%.?%d*)") do -- \fsp
+			style.spacing = tonumber(fsp) or style.spacing
 		end
 
-		for p, fsc in tags:gmatch("\\fsc([xy])(%d+%.?%d+)") do -- \fsc[xy]
+		for p, fsc in tags:gmatch("\\fsc([xy])(%d+%.?%d*)") do -- \fsc[xy]
 			if p == 'x' then
-				style.scale_x = tonumber(fsc)
+				style.scale_x = tonumber(fsc) or style.scale_x
 			else
-				style.scale_y = tonumber(fsc)
+				style.scale_y = tonumber(fsc) or style.scale_y
 			end
 		end
 
@@ -642,7 +646,19 @@ user_var={
 
 		line.rePreStyle = style
 
+		-- 重写 line
+
+		local x, y = line.x, line.y
+		for pos_x, pos_y in line.text:gmatch("\\pos%(([^,]+),([^%)]+)%)") do
+			x, y = tonumber(pos_x) or line.x, tonumber(pos_y) or line.y
+		end
+		local offset_x, offset_y = x - line.x, y - line.y
+		line.x, line.y = x, y
+		line.left, line.right = line.left + offset_x, line.right + offset_x
+		line.top, line.bottom = line.top + offset_y, line.bottom + offset_y
+
 		-- 重新计算宽高
+
 		local line_break_num = 0
 		for _ in line.text:gmatch([[\N]]) do
 			line_break_num = line_break_num + 1
@@ -694,6 +710,23 @@ user_var={
 			local half_h = new_height / 2
 			line.top, line.bottom = line.y - half_h, line.y + half_h
 		end
+
+		if style.align == 1 or style.align == 4 or style.align == 7 then
+			line.center = line.left + line.width / 2
+		elseif style.align == 2 or style.align == 5 or style.align == 8 then
+			line.center = line.left + line.width / 2
+		elseif style.align == 3 or style.align == 6 or style.align == 9 then
+			line.center = line.left + line.width / 2
+		end
+		line.hcenter = line.center
+		if style.align >= 1 and style.align <= 3 then
+			line.middle = line.bottom - line.height / 2
+		elseif style.align >= 4 and style.align <= 6 then
+			line.middle = line.top + line.height / 2
+		elseif style.align >= 7 and style.align <= 9 then
+			line.middle = line.top + line.height / 2
+		end
+		line.vcenter = line.middle
 	end,
 	--- @param line Line
 	--- @param callback fun(
@@ -1051,64 +1084,84 @@ user_var={
 	--- @param width number?
 	--- @return nil - insert subcache
 	posLine=function(line, width)
-		line = user_var.deepCopy(line)
+		local line = user_var.deepCopy(line)
 
 		user_var.rePreLine(line)
 		width = width or 1
 
 		local xres, yres = aegisub.video_size()
 		xres, yres = (xres or 1920) * 10, (yres or 1080) * 10
-		local pos_tag = {line.text:match("\\pos%(([^,]-),([^%)]-)%)")}
-		local x, y = pos_tag[1] or line.x, pos_tag[2] or line.y
-		local offset_x, offset_y = x - line.x, y - line.y
-		local l, r, t, b = line.left, line.right - line.styleref.spacing * 2, line.top, line.bottom
-		l, r, t, b = l + offset_x, r + offset_x, t + offset_y, b + offset_y
 
 		local line_line = user_var.deepCopy(line)
 
 		-- top bottom
 		local top_bottom = string.format(
 			[[{\an\pos(%s,pos_y)\bord0\shad0\c&H0000FF&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]],
-			x,
+			line.x,
 			width,
 			xres, width,
 			xres)
-		line_line.text = top_bottom:gsub([[\an]], [[\an2]]):gsub("pos_y", t)
+		line_line.text = top_bottom:gsub([[\an]], [[\an2]]):gsub("pos_y", line.top)
 		user_var.addLine(line_line)
-		line_line.text = top_bottom:gsub([[\an]], [[\an8]]):gsub("pos_y", b)
+		line_line.text = top_bottom:gsub([[\an]], [[\an8]]):gsub("pos_y", line.bottom)
 		user_var.addLine(line_line)
 
 		-- left right
 		local left_right = string.format(
 			[[{\an\pos(pos_x,%s)\bord0\shad0\c&H00FF00&\1a&H80&\p1}m 0 0 l %d 0 %d %d 0 %d]],
-			y,
+			line.y,
 			width,
 			width, yres,
 			yres)
-		line_line.text = left_right:gsub([[\an]], [[\an6]]):gsub("pos_x", l)
+		line_line.text = left_right:gsub([[\an]], [[\an6]]):gsub("pos_x", line.left)
 		user_var.addLine(line_line)
-		line_line.text = left_right:gsub([[\an]], [[\an4]]):gsub("pos_x", r)
+		line_line.text = left_right:gsub([[\an]], [[\an4]]):gsub("pos_x", line.right)
 		user_var.addLine(line_line)
 
 		-- descent ext_lead
-		local _, _, descent, ext_lead = aegisub.text_extents(line.styleref, "")
+		local _, _, descent, ext_lead = aegisub.text_extents(line.rePreStyle, "")
 		descent, ext_lead = tonumber(descent), tonumber(ext_lead)
 		local descent_extlead = string.format(
-			[[{\an\pos(%s,pos_y)\bord0\shad0\&HFF0000&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]],
-			x,
+			[[{\an\pos(%s,pos_y)\bord0\shad0\c&HFF0000&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]],
+			line.x,
 			width,
 			xres, width,
 			xres)
 		if descent ~= 0 then
-			line_line.text = descent_extlead:gsub([[\an]], [[\an2]]):gsub("pos_y", t + descent)
+			line_line.text = descent_extlead:gsub([[\an]], [[\an2]]):gsub("pos_y", line.top + descent)
 			user_var.addLine(line_line)
-			line_line.text = descent_extlead:gsub([[\an]], [[\an8]]):gsub("pos_y", b - descent)
+			line_line.text = descent_extlead:gsub([[\an]], [[\an8]]):gsub("pos_y", line.bottom - descent)
 			user_var.addLine(line_line)
 		end
 		if ext_lead ~= 0 then
-			line_line.text = descent_extlead:gsub([[\an]], [[\an2]]):gsub("pos_y", t - ext_lead)
+			line_line.text = descent_extlead:gsub([[\an]], [[\an2]]):gsub("pos_y", line.top - ext_lead)
 			user_var.addLine(line_line)
-			line_line.text = descent_extlead:gsub([[\an]], [[\an8]]):gsub("pos_y", b + ext_lead)
+			line_line.text = descent_extlead:gsub([[\an]], [[\an8]]):gsub("pos_y", line.bottom + ext_lead)
+			user_var.addLine(line_line)
+		end
+
+		-- center row
+		line_line.text = string.format(
+			[[{\an5\pos(%s,%s)\bord0\shad0\c&HFFFFFF&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]],
+			line.center, line.middle,
+			width,
+			xres, width,
+			xres)
+		user_var.addLine(line_line)
+		--center col
+		local center_col = string.format(
+			[[{\an5\pos(pos_x,%s)\bord0\shad0\c&HFFFFFF&\1a&H80&\p1}m 0 0 l %d 0 %d %d 0 %d]],
+			line.middle,
+			width,
+			width, yres,
+			yres)
+		line_line.text = center_col:gsub("pos_x", line.center)
+		user_var.addLine(line_line)
+
+		if line.rePreStyle.spacing ~= 0 then
+			line_line.text = left_right:gsub([[\an]], [[\an4]]):gsub("pos_x", line.right - line.rePreStyle.spacing)
+			user_var.addLine(line_line)
+			line_line.text = center_col:gsub("pos_x", line.center - line.rePreStyle.spacing / 2)
 			user_var.addLine(line_line)
 		end
 	end,
@@ -2614,9 +2667,9 @@ local function macro_processing_function_initialize(subtitles)
 	initialize(subtitles, find_event(subtitles))
 end
 
-aegisub.register_macro(tr"Tag Replace Apply", tr"Replace all strings with your settings", macro_processing_function)
-aegisub.register_macro(tr"Tag Replace Apply in selected lines", tr"Replace selected lines' strings with your settings", macro_processing_function_selected)
-aegisub.register_macro(tr"Tag Replace Initialize", tr"Only do the initialize function", macro_processing_function_initialize)
+aegisub.register_macro(tr"Tag Replace/Apply", tr"Replace all strings with your settings", macro_processing_function)
+aegisub.register_macro(tr"Tag Replace/Apply the selected lines", tr"Replace selected lines' strings with your settings", macro_processing_function_selected)
+aegisub.register_macro(tr"Tag Replace/Initialize", tr"Only do the initialize function", macro_processing_function_initialize)
 
 --- @param subtitles Subtitles
 local function filter_processing_function(subtitles, old_settings)
