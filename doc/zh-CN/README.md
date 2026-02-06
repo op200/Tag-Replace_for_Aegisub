@@ -449,7 +449,7 @@ Tag Replace 的操作规范中，内置函数同样存储在 `user_var` 中，�
   ```lua
   @param line Line
   @param colors {[1]: string; [2]: string; [3]: string; [4]: string;}
-  @param tags string[] -- e.g. {"\\c", "\\1a", "\\3c"}
+  @param tags string[] -- e.g. {"c", "1a", "3c"}
   @param step {
     [1]: number?; -- x_step
     [2]: number?; -- y_step
