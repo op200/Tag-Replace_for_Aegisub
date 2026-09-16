@@ -12,13 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Upload tag-replace.lua
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          gh release upload "$RELEASE_TAG" tag-replace.lua \
-            --repo "$GITHUB_REPOSITORY" \
-            --clobber
+        uses: actions/upload-artifact@v7
+        with:
+          path: ./tag-replace.lua
