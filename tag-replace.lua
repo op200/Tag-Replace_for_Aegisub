@@ -11,7 +11,7 @@ local tr = aegisub.gettext
 script_name = tr"Tag Replace"
 script_description = tr"Replace string such as tag"
 script_author = "op200"
-script_version = "2.8.0"
+script_version = "2.8.1"
 -- https://github.com/op200/Tag-Replace_for_Aegisub
 
 
@@ -65,24 +65,24 @@ script_version = "2.8.0"
 --- @class Line
 --- @field version number
 --- @field fieldsToDeepCopy { [1]: "extra" }
---- @field fieldsToCopy { 
----     [1]: "actor", [2]: "class", [3]: "comment", [4]: "effect", [5]: "end_time", [6]: "layer", 
----     [7]: "margin_l", [8]: "margin_r", [9]: "margin_t", [10]: "section", [11]: "start_time", 
----     [12]: "style", [13]: "text", [14]: "number", [15]: "transforms", [16]: "transformShift", 
----     [17]: "transformsAreTokenized", [18]: "properties", [19]: "styleRef", [20]: "wasLinear",
+--- @field fieldsToCopy {
+--- 	[1]: "actor", [2]: "class", [3]: "comment", [4]: "effect", [5]: "end_time", [6]: "layer",
+--- 	[7]: "margin_l", [8]: "margin_r", [9]: "margin_t", [10]: "section", [11]: "start_time",
+--- 	[12]: "style", [13]: "text", [14]: "number", [15]: "transforms", [16]: "transformShift",
+--- 	[17]: "transformsAreTokenized", [18]: "properties", [19]: "styleRef", [20]: "wasLinear",
 --- }
 --- @field splitChar "\\\6"
 --- @field tPlaceholder fun(count: number): string
 --- @field tTokenPattern "\\\3(%d+)\\\3"
 --- @field defaultXPosition {
----     [1]: (fun(subResX: number, leftMargin: number, rightMargin: number): number),
----     [2]: (fun(subResX: number, leftMargin: number, rightMargin: number): number),
----     [3]: (fun(subResX: number, leftMargin: number, rightMargin: number): number),
+--- 	[1]: (fun(subResX: number, leftMargin: number, rightMargin: number): number),
+--- 	[2]: (fun(subResX: number, leftMargin: number, rightMargin: number): number),
+--- 	[3]: (fun(subResX: number, leftMargin: number, rightMargin: number): number),
 --- }
 --- @field defaultYPosition {
----     [1]: (fun(subResY: number, verticalMargin: number): number),
----     [2]: (fun(subResY: number, verticalMargin: number): number),
----     [3]: (fun(subResY: number, verticalMargin: number): number),
+--- 	[1]: (fun(subResY: number, verticalMargin: number): number),
+--- 	[2]: (fun(subResY: number, verticalMargin: number): number),
+--- 	[3]: (fun(subResY: number, verticalMargin: number): number),
 --- }
 --- @field parentCollection any
 --- @field extra table<string, any>?
@@ -168,12 +168,12 @@ end
 local function get_class(effect, is_temp)
 	local class = {}
 	if is_temp then
-		for word in effect:match("@([^#]*)#"):gmatch("[^;]+") do
+		for word in effect:match"@([^#]*)#":gmatch"[^;]+" do
 			table.insert(class, word)
 		end
 	else
-		if effect:find("^beretag[@!]") then
-			for word in effect:sub(9):gmatch("[^;]+") do
+		if effect:find"^beretag[@!]" then
+			for word in effect:sub(9):gmatch"[^;]+" do
 				table.insert(class, word)
 			end
 		end
@@ -209,7 +209,16 @@ user_var={
 	},
 	use_xpcall=false, --- @type boolean
 
-	--功能性
+	-- 功能性
+
+	--- @type table<string, fun(this: Line): Line?>
+	_custom_mode={},
+	--- @param name string
+	--- @param add fun(this: Line): Line?
+	--- @return nil
+	cusMod=function(name, add)
+		user_var._custom_mode[name] = add
+	end,
 
 	--- @generic T
 	--- @param add T
@@ -249,7 +258,7 @@ user_var={
 	--- @param is_must_equal boolean
 	--- @return nil
 	checkVer=function(ver, is_must_equal)
-		if ver:find("[a-zA-z]") or script_version:find("%a") then
+		if ver:find"[a-zA-z]" or script_version:find"%a" then
 			user_var.debug("$checkVer: Can not check informal version", true)
 		end
 
@@ -261,10 +270,10 @@ user_var={
 			end
 		else
 			local script_ver, input_ver = {}, {}
-			for v in (script_version:match("(.-)%-") or script_version):gmatch("%d+") do
+			for v in (script_version:match"(.-)%-" or script_version):gmatch"%d+" do
 				table.insert(script_ver, tonumber(v))
 			end
-			for v in (ver:match("(.-)%-") or ver):gmatch("%d+") do
+			for v in (ver:match"(.-)%-" or ver):gmatch"%d+" do
 				table.insert(input_ver, tonumber(v))
 			end
 
@@ -297,7 +306,7 @@ user_var={
 	--- @param ... string
 	--- @return nil - modify line obj
 	addClass=function(line, ...)
-		if not line.effect:find("^beretag@.") then
+		if not line.effect:find"^beretag@." then
 			user_var.debug(tr"Must beretag")
 			return
 		end
@@ -320,7 +329,7 @@ user_var={
 	--- @param ... string
 	--- @return nil - modify line obj
 	delClass=function(line, ...)
-		if not line.effect:find("^beretag@.") then user_var.debug(tr"Must beretag") return end
+		if not line.effect:find"^beretag@." then user_var.debug(tr"Must beretag") return end
 		local class = get_class(line.effect, false)
 		local del_class = {select(1, ...)}
 		local class_dict = {}
@@ -340,7 +349,7 @@ user_var={
 	--- @param ... string
 	--- @return nil - modify line obj
 	newClass=function(line, ...)
-		if not line.effect:find("^beretag@.") then user_var.debug(tr"Must beretag") return end
+		if not line.effect:find"^beretag@." then user_var.debug(tr"Must beretag") return end
 		local new_class = {select(1, ...)}
 		line.effect = "beretag@" .. table.concat(new_class, ";")
 	end,
@@ -352,8 +361,9 @@ user_var={
 		end
 	end,
 	--- @param ... string
+	--- @return nil - insert msg
 	addMsg=function(...)
-		for _,msg in ipairs({select(1, ...)}) do
+		for _, msg in ipairs({select(1, ...)}) do
 			table.insert(user_var.msg, user_var.deepCopy(msg))
 		end
 	end,
@@ -379,15 +389,15 @@ user_var={
 		while index <= length do
 			buffer = buffer * 256
 			if index <= length then
-					buffer = buffer + string.byte(str, index)
-					index = index + 1
+				buffer = buffer + string.byte(str, index)
+				index = index + 1
 			end
 			bit = bit + 8
 			while bit >= 6 do
-					bit = bit - 6
-					local char_index = math.floor(buffer / (2 ^ bit)) % 64 + 1
-					table.insert(b64, base64_chars:sub(char_index, char_index))
-					buffer = buffer % (2 ^ bit)
+				bit = bit - 6
+				local char_index = math.floor(buffer / (2 ^ bit)) % 64 + 1
+				table.insert(b64, base64_chars:sub(char_index, char_index))
+				buffer = buffer % (2 ^ bit)
 			end
 		end
 
@@ -408,18 +418,17 @@ user_var={
 		local result = {}
 		local buffer = 0
 		local bit = 0
-		local length = #str
 
-		for i = 1, length do
+		for i = 1, #str do
 			local char = str:sub(i, i)
 			if char ~= "=" then
-					buffer = buffer * 64 + base64_reverse[char]
-					bit = bit + 6
-					if bit >= 8 then
-						bit = bit - 8
-						table.insert(result, string.char(math.floor(buffer / (2 ^ bit))))
-						buffer = buffer % (2 ^ bit)
-					end
+				buffer = buffer * 64 + base64_reverse[char]
+				bit = bit + 6
+				if bit >= 8 then
+					bit = bit - 8
+					table.insert(result, string.char(math.floor(buffer / (2 ^ bit))))
+					buffer = buffer % (2 ^ bit)
+				end
 			end
 		end
 
@@ -431,94 +440,96 @@ user_var={
 		local output = {}
 		local i = 1
 		local len = #input
-		
+
 		while i <= len do
 			local byte = input:byte(i)
-			
+
 			-- ASCII 字符 (0-127)
 			if byte < 0x80 then
-					table.insert(output, string.char(byte))
-					i = i + 1
-			
+				table.insert(output, string.char(byte))
+				i = i + 1
+
 			-- 2字节 UTF-8 字符
 			elseif byte >= 0xC2 and byte <= 0xDF then
-					if i + 1 <= len then
-						local byte2 = input:byte(i + 1)
-						if byte2 >= 0x80 and byte2 <= 0xBF then
-							table.insert(output, string.sub(input, i, i + 1))
-							i = i + 2
-						else
-							table.insert(output, "?")
-							i = i + 1
-						end
+				if i + 1 <= len then
+					local byte2 = input:byte(i + 1)
+					if byte2 >= 0x80 and byte2 <= 0xBF then
+						table.insert(output, string.sub(input, i, i + 1))
+						i = i + 2
 					else
 						table.insert(output, "?")
 						i = i + 1
 					end
-			
+				else
+					table.insert(output, "?")
+					i = i + 1
+				end
+
 			-- 3字节 UTF-8 字符
 			elseif byte >= 0xE0 and byte <= 0xEF then
-					if i + 2 <= len then
-						local byte2 = input:byte(i + 1)
-						local byte3 = input:byte(i + 2)
-						if (byte2 >= 0x80 and byte2 <= 0xBF) and 
-							(byte3 >= 0x80 and byte3 <= 0xBF) then
-							-- 检查过长的编码 (overlong)
-							if byte == 0xE0 and byte2 < 0xA0 then
-									table.insert(output, "?")
-									i = i + 1
-							elseif byte == 0xED and byte2 > 0x9F then
-									table.insert(output, "?")
-									i = i + 1
-							else
-									table.insert(output, string.sub(input, i, i + 2))
-									i = i + 3
-							end
-						else
+				if i + 2 <= len then
+					local byte2 = input:byte(i + 1)
+					local byte3 = input:byte(i + 2)
+					if (byte2 >= 0x80 and byte2 <= 0xBF) and
+						(byte3 >= 0x80 and byte3 <= 0xBF)
+					then
+						-- 检查过长的编码 (overlong)
+						if byte == 0xE0 and byte2 < 0xA0 then
 							table.insert(output, "?")
 							i = i + 1
+						elseif byte == 0xED and byte2 > 0x9F then
+							table.insert(output, "?")
+							i = i + 1
+						else
+							table.insert(output, string.sub(input, i, i + 2))
+							i = i + 3
 						end
 					else
 						table.insert(output, "?")
 						i = i + 1
 					end
-			
+				else
+					table.insert(output, "?")
+					i = i + 1
+				end
+
 			-- 4字节 UTF-8 字符
 			elseif byte >= 0xF0 and byte <= 0xF4 then
-					if i + 3 <= len then
-						local byte2 = input:byte(i + 1)
-						local byte3 = input:byte(i + 2)
-						local byte4 = input:byte(i + 3)
-						if (byte2 >= 0x80 and byte2 <= 0xBF) and 
-							(byte3 >= 0x80 and byte3 <= 0xBF) and 
-							(byte4 >= 0x80 and byte4 <= 0xBF) then
-							-- 检查过长的编码 (overlong) 和超出范围的编码
-							if byte == 0xF0 and byte2 < 0x90 then
-									table.insert(output, "?")
-									i = i + 1
-							elseif byte == 0xF4 and byte2 > 0x8F then
-									table.insert(output, "?")
-									i = i + 1
-							else
-									table.insert(output, string.sub(input, i, i + 3))
-									i = i + 4
-							end
-						else
+				if i + 3 <= len then
+					local byte2 = input:byte(i + 1)
+					local byte3 = input:byte(i + 2)
+					local byte4 = input:byte(i + 3)
+					if (byte2 >= 0x80 and byte2 <= 0xBF) and
+						(byte3 >= 0x80 and byte3 <= 0xBF) and
+						(byte4 >= 0x80 and byte4 <= 0xBF)
+					then
+						-- 检查过长的编码 (overlong) 和超出范围的编码
+						if byte == 0xF0 and byte2 < 0x90 then
 							table.insert(output, "?")
 							i = i + 1
+						elseif byte == 0xF4 and byte2 > 0x8F then
+							table.insert(output, "?")
+							i = i + 1
+						else
+							table.insert(output, string.sub(input, i, i + 3))
+							i = i + 4
 						end
 					else
 						table.insert(output, "?")
 						i = i + 1
 					end
-			
+				else
+					table.insert(output, "?")
+					i = i + 1
+				end
+
 			-- 无效的 UTF-8 起始字节
 			else
 					table.insert(output, "?")
 					i = i + 1
 			end
 		end
-		
+
 		return table.concat(output)
 	end,
 	--- 迭代字符串的每个字符，返回字符列表
@@ -560,7 +571,7 @@ user_var={
 		return accumulator
 	end,
 
-	--后处理
+	-- 后处理
 
 	--- @param line Line
 	postProc=function(line)
@@ -575,17 +586,17 @@ user_var={
 	classmixProc=function(first, second, new_class)
 		if not (first and second) then return first or second end
 		local new = first
-		new.text = new.text..second.text
-		local effect_table = {new.effect:match("([^@]*@)(.*)")}
+		new.text = new.text .. second.text
+		local effect_table = {new.effect:match"([^@]*@)(.*)"}
 		if new_class then
-			new.effect = effect_table[1]..new_class
+			new.effect = effect_table[1] .. new_class
 		else
-			new.effect = effect_table[1]..second.effect:match("@([^#]*)")..effect_table[2]
+			new.effect = effect_table[1] .. second.effect:match "@([^#]*)" .. effect_table[2]
 		end
 		return new
 	end,
 
-	--行处理
+	-- 行处理
 
 	--- @param line Line
 	--- @param tags string?
@@ -596,13 +607,13 @@ user_var={
 
 		-- 重写 style
 
-		tags = tags or line.text:gsub("}{", ""):match("^{(.-)}") or ""
+		tags = tags or line.text:gsub("}{", ""):match"^{(.-)}" or ""
 
-		for fn in tags:gmatch("\\fn([^}\\]+)") do -- \fn
+		for fn in tags:gmatch"\\fn([^}\\]+)" do -- \fn
 			style.fontname = fn
 		end
 
-		for n, a in tags:gmatch("\\a(n?)(%d+)") do -- \an?
+		for n, a in tags:gmatch"\\a(n?)(%d+)" do -- \an?
 			if n == 'n' then
 				style.align = tonumber(a) or style.align
 			else
@@ -610,11 +621,11 @@ user_var={
 			end
 		end
 
-		for fs in tags:gmatch("\\fs(%d+%.?%d*)") do -- \fs
+		for fs in tags:gmatch"\\fs(%d+%.?%d*)" do -- \fs
 			style.fontsize = tonumber(fs) or style.fontsize
 		end
 
-		for c, fs in tags:gmatch("\\fs([%+%-])(%d+%.?%d*)") do -- \fs[+-]
+		for c, fs in tags:gmatch"\\fs([%+%-])(%d+%.?%d*)" do -- \fs[+-]
 			if c == '+' then
 				style.fontsize = (1 + fs / 10) * style.fontsize
 			else
@@ -622,11 +633,11 @@ user_var={
 			end
 		end
 
-		for fsp in tags:gmatch("\\fsp(%-?%d+%.?%d*)") do -- \fsp
+		for fsp in tags:gmatch"\\fsp(%-?%d+%.?%d*)" do -- \fsp
 			style.spacing = tonumber(fsp) or style.spacing
 		end
 
-		for p, fsc in tags:gmatch("\\fsc([xy])(%d+%.?%d*)") do -- \fsc[xy]
+		for p, fsc in tags:gmatch"\\fsc([xy])(%d+%.?%d*)" do -- \fsc[xy]
 			if p == 'x' then
 				style.scale_x = tonumber(fsc) or style.scale_x
 			else
@@ -649,7 +660,7 @@ user_var={
 		-- 重写 line
 
 		local x, y = line.x, line.y
-		for pos_x, pos_y in line.text:gmatch("\\pos%(([^,]+),([^%)]+)%)") do
+		for pos_x, pos_y in line.text:gmatch"\\pos%(([^,]+),([^%)]+)%)" do
 			x, y = tonumber(pos_x) or line.x, tonumber(pos_y) or line.y
 		end
 		local offset_x, offset_y = x - line.x, y - line.y
@@ -660,10 +671,10 @@ user_var={
 		-- 重新计算宽高
 
 		local line_break_num = 0
-		for _ in line.text:gmatch([[\N]]) do
+		for _ in line.text:gmatch[[\N]] do
 			line_break_num = line_break_num + 1
 		end
-		if line.text:find([[\N$]]) then
+		if line.text:find[[\N$]] then
 			line_break_num = line_break_num - 1
 		end
 
@@ -673,7 +684,7 @@ user_var={
 
 		local new_height, new_width = 0, 0
 
-		for t in (line.text..[[\N]]):gmatch([[(.-)\N]]) do
+		for t in (line.text .. [[\N]]):gmatch[[(.-)\N]] do
 			local new_line = user_var.deepCopy(line)
 			new_line.text = t
 
@@ -744,7 +755,7 @@ user_var={
 	--- 	[2]: number?; -- y_step
 	--- 	[3]: {[1]: number?; [2]: number?; [3]: number?; [4]: number?; }?; -- expand: {numbe?...} = {left, top, right, bottom}
 	--- }?
-	--- @param pos {[1]: number?; [2]: number?;} -- {x, y} 
+	--- @param pos {[1]: number?; [2]: number?;} -- {x, y}
 	--- @return nil -- insert subcache
 	gradient=function(line, callback, step, pos)
 		line = user_var.deepCopy(line)
@@ -753,13 +764,13 @@ user_var={
 		local style = styles[line.style]
 
 		-- 根据头部 {} 中的 \pos \fn \an? \fs[+-]? \fsp \fsc[xy] \[xy]?bord \[xy]?shad 标签重计算位置, pos 不是 style 中的, 放最后单独计算
-		local tags = line.text:gsub("}{", ""):match("^{(.-)}") or ""
+		local tags = line.text:gsub("}{", ""):match"^{(.-)}" or ""
 
 		user_var.rePreLine(line, tags)
 
 		-- \[xy]?bord
 		local bord = {style.outline, style.outline}
-		for p, b in tags:gmatch("\\([xy]?)bord(%d+%.?%d+)") do
+		for p, b in tags:gmatch"\\([xy]?)bord(%d+%.?%d+)" do
 			if p == 'x' then
 				bord[1] = tonumber(b)
 			elseif p == 'y' then
@@ -772,7 +783,7 @@ user_var={
 
 		-- \[xy]?shad
 		local shad = {style.shadow, style.shadow}
-		for p, s in tags:gmatch("\\([xy]?)shad(%d+%.?%d+)") do
+		for p, s in tags:gmatch"\\([xy]?)shad(%d+%.?%d+)" do
 			if p == 'x' then
 				shad[1] = tonumber(s)
 			elseif p == 'y' then
@@ -799,7 +810,7 @@ user_var={
 		step = step or {}
 		local expand = step[3] or {0, 0, 0, 0}
 
-		local pos_tag = {line.text:match("\\pos%(([^,]-),([^%)]-)%)")}
+		local pos_tag = {line.text:match"\\pos%(([^,]-),([^%)]-)%)"}
 		pos = pos or {}
 		pos = {pos[1] or pos_tag[1] or line.x, pos[2] or pos_tag[2] or line.y}
 		if not pos[1] or not pos[2] then user_var.debug(tr"Need position", true) end
@@ -811,15 +822,16 @@ user_var={
 			t + offset_y - (expand[2] or 0),
 			b + offset_y + (expand[4] or 0)
 
-		local step1, step2 = step[1] or r-l+1, step[2] or b-t+1
+		local step1, step2 = step[1] or r - l + 1, step[2] or b - t + 1
 
 		for x = l, r, step1 do
 			for y = t, b, step2 do
 				local new_line = user_var.deepCopy(line)
-				new_line.text = string.format([[{\pos(%.2f,%.2f)\clip(%.2f,%.2f,%.2f,%.2f)}%s]],
+				new_line.text = ([[{\pos(%.2f,%.2f)\clip(%.2f,%.2f,%.2f,%.2f)}%s]]):format(
 					pos[1], pos[2],
-					x, y, x+step1, y+step2,
-					new_line.text:gsub([[\pos%([^%)]-%)]], ""))
+					x, y, x + step1, y + step2,
+					new_line.text:gsub([[\pos%([^%)]-%)]], "")
+				)
 				local w, h = r - l, b - t
 				local x_relative, y_relative = x - l, y - t
 				callback(new_line,
@@ -842,12 +854,12 @@ user_var={
 	--- 	[1]: number?; -- x_step
 	--- 	[2]: number?; -- y_step
 	--- 	[3]: {[1]: number?; [2]: number?; [3]: number?; [4]: number?; }?; -- expand: {numbe?...} = {left, top, right, bottom}
-	--- }? 
+	--- }?
 	--- @param pos {[1]: number?; [2]: number?;} -- {x, y}
 	--- @return nil -- insert subcache
 	gradientColor=function(line, colors, tags, step, pos)
 		if #colors ~= 4 then
-			user_var.debug(string.format(tr"Parameter '%s' length not %d", "colors", 4), true)
+			user_var.debug(tr"Parameter '%s' length not %d":format("colors", 4), true)
 		end
 
 		local r1, g1, b1, a1 = util.extract_color(colors[1])
@@ -855,16 +867,16 @@ user_var={
 		local r3, g3, b3, a3 = util.extract_color(colors[3])
 		local r4, g4, b4, a4 = util.extract_color(colors[4])
 		if not (r1 and g1 and b1 and a1) then
-			user_var.debug(string.format(tr"The format of string '%s' is invalid", "colors[1]"), true)
+			user_var.debug(tr"The format of string '%s' is invalid":format("colors[1]"), true)
 		end
 		if not (r2 and g2 and b2 and a2) then
-			user_var.debug(string.format(tr"The format of string '%s' is invalid", "colors[2]"), true)
+			user_var.debug(tr"The format of string '%s' is invalid":format("colors[2]"), true)
 		end
 		if not (r3 and g3 and b3 and a3) then
-			user_var.debug(string.format(tr"The format of string '%s' is invalid", "colors[3]"), true)
+			user_var.debug(tr"The format of string '%s' is invalid":format("colors[3]"), true)
 		end
 		if not (r4 and g4 and b4 and a4) then
-			user_var.debug(string.format(tr"The format of string '%s' is invalid", "colors[4]"), true)
+			user_var.debug(tr"The format of string '%s' is invalid":format("colors[4]"), true)
 		end
 
 		local c_format_str = ""
@@ -914,7 +926,7 @@ user_var={
 		)
 	end,
 	colorGradient=function(line_info, rgba, step_set, tags, control_points, pos)
-		user_var.addMsg(string.format(tr"This is a deprecated function: %s", "$colorGradient"))
+		user_var.addMsg(tr"This is a deprecated function: %s":format("$colorGradient"))
 		-- 计算组合数
 		math.comb = function(n, k)
 			if k > n then return 0 end
@@ -954,11 +966,11 @@ user_var={
 		local meta, styles = karaskel.collect_head(user_var.sub)
 		local pos_line, line_num
 		local x1, y1, x2, y2
-	
+
 		if type(line_info) == "table" then
 			x1, y1, x2, y2 = line_info[1], line_info[2], line_info[3], line_info[4]
 			line_num = line_info[5] or user_var.bere_line
-	
+
 			pos_line = user_var.sub[line_num]
 			karaskel.preproc_line_pos(meta, styles, pos_line)
 		else
@@ -968,12 +980,12 @@ user_var={
 			karaskel.preproc_line_pos(meta, styles, pos_line)
 
 			local expand = step_set[3] or 0
----@diagnostic disable-next-line: cast-local-type
-			if type(expand)=="number" then expand={expand,expand,expand,expand} end
+--- @diagnostic disable-next-line: cast-local-type
+			if type(expand) == "number" then expand = {expand, expand, expand, expand} end
 			x1, y1, x2, y2 = pos_line.left - expand[1], pos_line.top - expand[2], pos_line.right + expand[3], pos_line.bottom + expand[4]
 		end
 
-		pos = pos or {nil,nil}
+		pos = pos or {nil, nil}
 		local pos_x, pos_y = pos[1] or pos_line.x, pos[2] or pos_line.y
 		x1, y1, x2, y2 = x1+pos_x-pos_line.x, y1+pos_y-pos_line.y, x2+pos_x-pos_line.x, y2+pos_y-pos_line.y
 
@@ -1037,12 +1049,13 @@ user_var={
 				local r, g, b, a = math.floor(interpolated_color[1] + 0.5), math.floor(interpolated_color[2] + 0.5), math.floor(interpolated_color[3] + 0.5), math.floor(interpolated_color[4] + 0.5)
 				if r and g and b and a then
 					local subline = user_var.sub[line_num]
-					subline.text = string.format("{\\clip(%.2f,%.2f,%.2f,%.2f)\\%s%s\\%s%s\\pos(%s,%s)}%s",
+					subline.text = ("{\\clip(%.2f,%.2f,%.2f,%.2f)\\%s%s\\%s%s\\pos(%s,%s)}%s"):format(
 						x, y, x + step_set[1], y + step_set[2],
 						color_tag, util.ass_color(interpolated_color[1], interpolated_color[2], interpolated_color[3]),
 						transparent_tag, util.ass_alpha(interpolated_color[4]),
 						pos_x, pos_y,
-						subline.text)
+						subline.text
+					)
 					table.insert(user_var.subcache, subline)
 				else
 					user_var.debug("Error: interpolated_color does not contain 4 valid elements: " .. r .. ", " .. g .. ", " .. b .. ", " .. a, true)
@@ -1063,18 +1076,18 @@ user_var={
 			if not pos_1 then break end
 
 			local t = text:sub(text_pos, pos_1-1)
-			if t~="" then
+			if t ~= "" then
 				table.insert(result, {t, false, text_num})
-				text_num = text_num+1
+				text_num = text_num + 1
 			end
 			table.insert(result, {text:sub(pos_1, pos_2), true, tag_num})
-			tag_num = tag_num+1
+			tag_num = tag_num + 1
 
-			text_pos = pos_2+1
+			text_pos = pos_2 + 1
 			last_pos_2 = pos_2
 		end
-		local t = text:sub(last_pos_2+1, -1)
-		if t~="" then
+		local t = text:sub(last_pos_2 + 1, -1)
+		if t ~= "" then
 			table.insert(result, {t, false, text_num})
 		end
 
@@ -1095,24 +1108,28 @@ user_var={
 		local line_line = user_var.deepCopy(line)
 
 		-- top bottom
-		local top_bottom = string.format(
-			[[{\an\pos(%s,pos_y)\bord0\shad0\c&H0000FF&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]],
+		local top_bottom = (
+			[[{\an\pos(%s,pos_y)\bord0\shad0\c&H0000FF&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]]
+		):format(
 			line.x,
 			width,
 			xres, width,
-			xres)
+			xres
+		)
 		line_line.text = top_bottom:gsub([[\an]], [[\an2]]):gsub("pos_y", line.top)
 		user_var.addLine(line_line)
 		line_line.text = top_bottom:gsub([[\an]], [[\an8]]):gsub("pos_y", line.bottom)
 		user_var.addLine(line_line)
 
 		-- left right
-		local left_right = string.format(
-			[[{\an\pos(pos_x,%s)\bord0\shad0\c&H00FF00&\1a&H80&\p1}m 0 0 l %d 0 %d %d 0 %d]],
+		local left_right = (
+			[[{\an\pos(pos_x,%s)\bord0\shad0\c&H00FF00&\1a&H80&\p1}m 0 0 l %d 0 %d %d 0 %d]]
+		):format(
 			line.y,
 			width,
 			width, yres,
-			yres)
+			yres
+		)
 		line_line.text = left_right:gsub([[\an]], [[\an6]]):gsub("pos_x", line.left)
 		user_var.addLine(line_line)
 		line_line.text = left_right:gsub([[\an]], [[\an4]]):gsub("pos_x", line.right)
@@ -1121,12 +1138,14 @@ user_var={
 		-- descent ext_lead
 		local _, _, descent, ext_lead = aegisub.text_extents(line.rePreStyle, "")
 		descent, ext_lead = tonumber(descent), tonumber(ext_lead)
-		local descent_extlead = string.format(
-			[[{\an\pos(%s,pos_y)\bord0\shad0\c&HFF0000&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]],
+		local descent_extlead = (
+			[[{\an\pos(%s,pos_y)\bord0\shad0\c&HFF0000&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]]
+		):format(
 			line.x,
 			width,
 			xres, width,
-			xres)
+			xres
+		)
 		if descent ~= 0 then
 			line_line.text = descent_extlead:gsub([[\an]], [[\an2]]):gsub("pos_y", line.top + descent)
 			user_var.addLine(line_line)
@@ -1141,20 +1160,24 @@ user_var={
 		end
 
 		-- center row
-		line_line.text = string.format(
-			[[{\an5\pos(%s,%s)\bord0\shad0\c&HFFFFFF&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]],
+		line_line.text = (
+			[[{\an5\pos(%s,%s)\bord0\shad0\c&HFFFFFF&\1a&H80&\p1}m 0 0 l 0 %d %d %d %d 0]]
+		):format(
 			line.center, line.middle,
 			width,
 			xres, width,
-			xres)
+			xres
+		)
 		user_var.addLine(line_line)
-		--center col
-		local center_col = string.format(
-			[[{\an5\pos(pos_x,%s)\bord0\shad0\c&HFFFFFF&\1a&H80&\p1}m 0 0 l %d 0 %d %d 0 %d]],
+		-- center col
+		local center_col = (
+			[[{\an5\pos(pos_x,%s)\bord0\shad0\c&HFFFFFF&\1a&H80&\p1}m 0 0 l %d 0 %d %d 0 %d]]
+		):format(
 			line.middle,
 			width,
 			width, yres,
-			yres)
+			yres
+		)
 		line_line.text = center_col:gsub("pos_x", line.center)
 		user_var.addLine(line_line)
 
@@ -1166,7 +1189,7 @@ user_var={
 		end
 	end,
 
-	--外部
+	-- 外部
 
 	--- @param cmd string
 	--- @param popen boolean
@@ -1174,7 +1197,7 @@ user_var={
 		if popen then
 			local handle = io.popen(cmd)
 			if not handle then error(("popen %s faild"):format(cmd)) end
-			local output = handle:read("*a") --- @type string?
+			local output = handle:read"*a" --- @type string?
 			handle:close()
 			return output
 		else
@@ -1184,24 +1207,25 @@ user_var={
 	--- @param cmd string
 	--- @param popen boolean
 	psCode=function(cmd, popen)
-		cmd = [[powershell -ExecutionPolicy Bypass -Command "]] ..
-			string.format(([[
+		cmd = [[powershell -ExecutionPolicy Bypass -Command "]]
+			.. ([[
 					$base64String = "%s";
 
 					$bytes = [System.Convert]::FromBase64String($base64String);
 					$decodedString = [System.Text.Encoding]::UTF8.GetString($bytes);
 
 					Invoke-Expression $decodedString;
-				]]):gsub('\r?\n', ''),
-				user_var.enbase64(cmd:gsub('\r?\n', ''))
-			):gsub('"', '\\"') .. '"'
+				]]):gsub('\r?\n', '')
+					:format(user_var.enbase64(cmd:gsub('\r?\n', '')))
+					:gsub('"', '\\"')
+			.. '"'
 		return user_var.cmdCode(cmd, popen)
 	end,
 	--- @param cmd string
 	--- @param popen boolean
 	pyCode=function(cmd, popen)
-		return user_var.cmdCode(string.format(
-			[[python -c "%s"]], cmd:gsub([[\N]], ';')), popen)
+		return user_var.cmdCode(([[python -c "%s"]]):format(
+			cmd:gsub([[\N]], ';')), popen)
 	end,
 	--- @param char string
 	--- @param line Line
@@ -1211,8 +1235,8 @@ user_var={
 		user_var.rePreLine(line)
 		local _, _, descent, ext_lead = aegisub.text_extents(line.styleref, "")
 
-		local ps_script = string.format(
-			[[$Character='%s';$FontName="%s";$FontSize=%s;]], char, line.styleref.fontname, line.bottom - line.top - descent
+		local ps_script = ([[$Character='%s';$FontName="%s";$FontSize=%s;]]):format(
+			char, line.styleref.fontname, line.bottom - line.top - descent
 		) .. [==[
 				Add-Type -AssemblyName PresentationCore;
 				Add-Type -AssemblyName WindowsBase;
@@ -1304,7 +1328,7 @@ user_var={
 				}
 				catch {
 					$out = "[ERROR] Character=$Character, FontName=$FontName, FontSize=$FontSize, Error=$($_.Exception.Message)";
-					
+
 					$utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($out);
 					$base64String = [Convert]::ToBase64String($utf8Bytes);
 					Write-Output $base64String;
@@ -1316,11 +1340,10 @@ user_var={
 			error("getGlyph error: pwsh return type error: type = " .. type(res))
 		end
 		res = res:gsub("\r?\n$", "")
-		if not res:find("^{") then
+		if not res:find"^{" then
 			local decoded = user_var.debase64(res)
 			if decoded:find("^%[ERROR%]") then
-				user_var.debug(string.format(
-					"%s - %s: %s",
+				user_var.debug(("%s - %s: %s"):format(
 					user_var.temp_line, user_var.num, decoded
 				))
 				return nil
@@ -1401,9 +1424,9 @@ local function initialize(sub, begin)
 		if aegisub.progress.is_cancelled() then aegisub.cancel() end
 		aegisub.progress.set(100 * findline / #sub)
 
-		if sub[findline].effect:find("^beretag!") then --删除beretag!行
+		if sub[findline].effect:find"^beretag!" then  -- 删除beretag!行
 			sub.delete(findline)
-		elseif sub[findline].effect:find("^:beretag@") then --还原:beretag@行
+		elseif sub[findline].effect:find"^:beretag@" then -- 还原:beretag@行
 			local new_line = sub[findline]
 			new_line.comment = false
 			new_line.effect = new_line.effect:sub(2)
@@ -1426,17 +1449,18 @@ local function cmp_class(temp_effct, bere_effct, strict)
 
 	if strict then
 		if #temp_class ~= #bere_class then return false end
-		table.sort(temp_class) table.sort(bere_class)
-		for i=1,#temp_class do
+		table.sort(temp_class)
+		table.sort(bere_class)
+		for i = 1, #temp_class do
 			if temp_class[i] ~= bere_class[i] then
 				return false
 			end
 		end
 		return true
 	else
-		for i,j in pairs(temp_class) do
-			for p,k in pairs(bere_class) do
-				if j==k then return true end
+		for i, j in pairs(temp_class) do
+			for p, k in pairs(bere_class) do
+				if j == k then return true end
 			end
 		end
 		return false
@@ -1457,6 +1481,7 @@ end
 --- @field cuttime boolean
 --- @field classmix boolean
 --- @field onlyfind boolean
+--- @field others string[]
 --- @param effect string
 --- @return Mode
 local function get_mode(effect)
@@ -1475,15 +1500,18 @@ local function get_mode(effect)
 		uninsert=false,
 		cuttime=false,
 		classmix=false,
-		onlyfind=false
+		onlyfind=false,
+		others={}
 	}
-	if modestring:len()==0 then
+	if modestring:len() == 0 then
 		return mode
 	end
 
-	for word in modestring:gmatch("[^;]+") do
-		if mode[word]~=nil then
-			mode[word]=true
+	for word in modestring:gmatch"[^;]+" do
+		if mode[word] == nil then
+			table.insert(mode["others"], word)
+		else
+			mode[word] = true
 		end
 	end
 	return mode
@@ -1494,66 +1522,95 @@ end
 --- @param sub Subtitles
 --- input 文本和 replace 次数，通过 re_num 映射 karaok 变量至变量表
 local function var_expansion(text, re_num, sub)
-	--扩展表达式中的$部分
+	-- 扩展表达式中的$部分
 	local pos1, pos2 = 1, 1 --- @type integer?, integer?
 	while true do
 		local pos3, pos4 = text:find("!.-!", pos2)
 		if not pos3 then break end
-		local sub_str = text:sub(pos3+1,pos4-1)
+		local sub_str = text:sub(pos3 + 1, pos4 - 1)
 		while true do
-			local pos5, pos6 = sub_str:find("%$[%w_]+")
+			local pos5, pos6 = sub_str:find"%$[%w_]+"
 			if not pos5 then break end
-			local var = sub_str:sub(pos5+1,pos6)
-			if var~="" then--扩展预留关键词
-				if var=="kdur" then
-					sub_str = sub_str:sub(1,pos5-1)..(user_var.kdur[re_num]-user_var.kdur[re_num-1])..sub_str:sub(pos6+1)
-				elseif var=="start" then
-					sub_str = sub_str:sub(1,pos5-1)..(user_var.kdur[re_num-1]*10)..sub_str:sub(pos6+1)
-				elseif var=="end" then
-					sub_str = sub_str:sub(1,pos5-1)..(user_var.kdur[re_num]*10)..sub_str:sub(pos6+1)
-				elseif var=="mid" then
-					sub_str = sub_str:sub(1,pos5-1)..math.floor((user_var.kdur[re_num-1] + user_var.kdur[re_num]) * 5)..sub_str:sub(pos6+1)
+			local var = sub_str:sub(pos5+1, pos6)
+			if var ~= "" then -- 扩展预留关键词
+				if var == "kdur" then
+					sub_str = sub_str:sub(1, pos5 - 1)
+						..(user_var.kdur[re_num] - user_var.kdur[re_num-1])
+						..sub_str:sub(pos6 + 1)
+				elseif var == "start" then
+					sub_str = sub_str:sub(1, pos5 - 1)
+						..(user_var.kdur[re_num-1] * 10)
+						..sub_str:sub(pos6 + 1)
+				elseif var == "end" then
+					sub_str = sub_str:sub(1, pos5 - 1)
+						..(user_var.kdur[re_num] * 10)
+						..sub_str:sub(pos6 + 1)
+				elseif var == "mid" then
+					sub_str = sub_str:sub(1, pos5 - 1)
+						..math.floor((user_var.kdur[re_num-1] + user_var.kdur[re_num]) * 5)
+						..sub_str:sub(pos6 + 1)
 				else
-					sub_str = sub_str:sub(1,pos5-1).."user_var."..var..sub_str:sub(pos6+1)
+					sub_str = sub_str:sub(1, pos5 - 1)
+						.."user_var."
+						..var
+						..sub_str:sub(pos6 + 1)
 				end
 			end
 		end
 		assert(pos4)
-		text = text:sub(1,pos3)..sub_str..text:sub(pos4)
+		text = text:sub(1, pos3) .. sub_str .. text:sub(pos4)
 
 		pos1, pos2 = text:find("!.-!", pos2)
-		pos2 = pos2+1
+		pos2 = pos2 + 1
 	end
-	--扩展变量
+	-- 扩展变量
 	while true do
-		pos1, pos2 = text:find("%$[%w_%[%]%.\"%-%+%*/%%%^]+")
+		pos1, pos2 = text:find"%$[%w_%[%]%.\"%-%+%*/%%%^]+"
 		if not pos1 then break end
-		local var = text:sub(pos1+1,pos2)
-		if var~="" then--扩展预留关键词
-			if var=="kdur" then
-				text = text:sub(1,pos1-1)..(user_var.kdur[re_num]-user_var.kdur[re_num-1])..text:sub(pos2+1)
-			elseif var=="start" then
-				text = text:sub(1,pos1-1)..(user_var.kdur[re_num-1]*10)..text:sub(pos2+1)
-			elseif var=="end" then
-				text = text:sub(1,pos1-1)..(user_var.kdur[re_num]*10)..text:sub(pos2+1)
-			elseif var=="mid" then
-				text = text:sub(1,pos1-1)..math.floor((user_var.kdur[re_num-1] + user_var.kdur[re_num]) * 5)..text:sub(pos2+1)
+		local var = text:sub(pos1 + 1, pos2)
+		if var ~= "" then -- 扩展预留关键词
+			if var == "kdur" then
+				text = text:sub(1, pos1 - 1)
+					..(user_var.kdur[re_num] - user_var.kdur[re_num-1])
+					..text:sub(pos2 + 1)
+			elseif var == "start" then
+				text = text:sub(1, pos1 - 1)
+					..(user_var.kdur[re_num-1] * 10)
+					..text:sub(pos2 + 1)
+			elseif var == "end" then
+				text = text:sub(1, pos1 - 1)
+					..(user_var.kdur[re_num] * 10)
+					..text:sub(pos2 + 1)
+			elseif var == "mid" then
+				text = text:sub(1, pos1 - 1)
+					..math.floor((user_var.kdur[re_num-1] + user_var.kdur[re_num]) * 5)
+					..text:sub(pos2 + 1)
 			else
-				text = text:sub(1,pos1-1).."!return user_var."..var.."!"..text:sub(pos2+1)
+				text = text:sub(1, pos1 - 1)
+					.."!return user_var."
+					..var
+					.."!"
+					..text:sub(pos2 + 1)
 			end
 		end
 	end
-	--扩展表达式
+	-- 扩展表达式
 	user_var.exp_num = re_num - 1
 	while true do
 		pos1, pos2 = text:find("!.-!")
 		if not pos1 then break end
-		local load_fun, err = load("return function(sub,user_var) "..text:sub(pos1+1,pos2-1).." end")
+		local load_fun, err = load(
+			"return function(sub,user_var) "
+			..text:sub(pos1 + 1, pos2 - 1)
+			.." end"
+		)
 
 		if not load_fun then
 			user_var.debug(
-				string.format(tr"[var_expansion] Error in template line %s and beretag line %s: %s", user_var.temp_line, user_var.num, err),
-				true)
+				tr"[var_expansion] Error in template line %s and beretag line %s: %s":format(
+					user_var.temp_line, user_var.num, err),
+				true
+			)
 		end
 
 		local return_str, err
@@ -1589,113 +1646,116 @@ local append_num
 --- @param mode Mode
 --- @return integer
 local function do_replace(sub, bere, mode)
-	if user_var.this.comment or not user_var.this.effect:find("^beretag[@!]") then return 1 end--若该行被注释或为非beretag行，则跳过
+	if user_var.this.comment or not user_var.this.effect:find"^beretag[@!]" then return 1 end -- 若该行被注释或为非beretag行，则跳过
 	local temp_line_now = sub[user_var.temp_line]
-	if not cmp_class(temp_line_now.effect, user_var.this.effect, mode.strictclass) then return 1 end--判断该行class是否与模板行class有交集
-	--准备replace
+	if not cmp_class(temp_line_now.effect, user_var.this.effect, mode.strictclass) then return 1 end -- 判断该行class是否与模板行class有交集
+	-- 准备replace
 	user_var.bere_num = user_var.bere_num + 1
-	local insert_line, insert_table=sub[bere], {}
-	local find_pos, kdur_num=1, 2
-	while true do--写入kdur表
-		local pos1, pos2 = insert_line.text:find("\\k%d*",find_pos)
+	local insert_line, insert_table = sub[bere], {}
+	local find_pos, kdur_num = 1, 2
+	while true do -- 写入kdur表
+		local pos1, pos2 = insert_line.text:find("\\k%d*", find_pos)
 		if not pos1 then break end
-		if pos1+1==pos2 then--防止\k后无值
+		if pos1 + 1 == pos2 then -- 防止\k后无值
 			user_var.kdur[kdur_num] = user_var.kdur[kdur_num-1]
 		else
 			user_var.kdur[kdur_num] = user_var.kdur[kdur_num-1] + tonumber(insert_line.text:sub(pos1+2,pos2))
 		end
-		find_pos, kdur_num = pos2+1, kdur_num+1
+		find_pos, kdur_num = pos2 + 1, kdur_num + 1
 	end
-	--执行replace
-	--根据mode判断替换方式
-	local temp_tag, temp_add_tail = temp_line_now.text:match("^{(.-)}"), temp_line_now.text:match("^{.-}(.*)")
-	local temp_re_tag, temp_add_text = temp_add_tail:match("^{(.-)}"), temp_add_tail:match("^{.-}(.*)")
+	-- 执行 replace
+	-- 根据 mode 判断替换方式
+	local temp_tag, temp_add_tail = temp_line_now.text:match"^{(.-)}", temp_line_now.text:match"^{.-}(.*)"
+	local temp_re_tag, temp_add_text = temp_add_tail:match"^{(.-)}", temp_add_tail:match"^{.-}(.*)"
 
-	local find_pos, re_num = 1, 2 --re_num从2开始计数
+	local find_pos, re_num = 1, 2 -- re_num 从2开始计数
 	if mode.cuttag then
-		--找到每个temp_tag的位置，将这些位置(除了第一个)前面的{的位置和结尾的位置写入pos_table，根据pos_table写入insert_table，最后替换insert_table的值
-		local pos_table={}
+		-- 找到每个 temp_tag 的位置，将这些位置(除了第一个)前面的{的位置和结尾的位置写入 pos_table，
+		-- 根据 pos_table 写入 insert_table，最后替换 insert_table 的值
+		local pos_table = {}
 		if mode.findtext then
-			while true do--写入pos_table
-				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
+			while true do -- 写入pos_table
+				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos) -- 记录找到的 temp_tag 位置
 				if not pos1 then break end
 				table.insert(pos_table,pos1)
-				find_pos, re_num = pos2+1, re_num+1
+				find_pos, re_num = pos2 + 1, re_num + 1
 			end
 
-			pos_table[1], re_num=1, 2
-			table.insert(pos_table,insert_line.text:len()+1)
-			for i=1,#pos_table-1 do
-				local new_text = insert_line.text:sub(pos_table[i],pos_table[i+1]-1)
-				local find_list = {new_text:find(var_expansion(temp_tag,re_num,sub))}
+			pos_table[1], re_num = 1, 2
+			table.insert(pos_table, insert_line.text:len() + 1)
+			for i = 1, #pos_table - 1 do
+				local new_text = insert_line.text:sub(pos_table[i], pos_table[i + 1] - 1)
+				local find_list = { new_text:find(var_expansion(temp_tag, re_num, sub)) }
 				local pos1, pos2 = find_list[1], find_list[2]
-				table.remove(find_list, 1) table.remove(find_list, 1)
+				table.remove(find_list, 1)
+				table.remove(find_list, 1)
 				assert(pos1)
 				user_var.bere_text = new_text:sub(pos1, pos2)
 				user_var.bere_match = find_list
 
-				new_text = new_text:sub(1,pos1-1) .. var_expansion(temp_re_tag,re_num,sub) .. new_text:sub(pos2+1)
+				new_text = new_text:sub(1, pos1 - 1) .. var_expansion(temp_re_tag, re_num, sub) .. new_text:sub(pos2 + 1)
 				table.insert(insert_table, new_text)
-				re_num = re_num+1
+				re_num = re_num + 1
 			end
 		else
-			while true do--写入pos_table
-				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag,re_num,sub), find_pos)--记录找到的temp_tag位置
+			while true do -- 写入pos_table
+				local pos1, pos2 = insert_line.text:find(var_expansion(temp_tag, re_num, sub), find_pos) -- 记录找到的 temp_tag 位置
 				if not pos1 then break end
-				while pos1>=1 do
-					if insert_line.text:byte(pos1)==string.byte("{") then break end
-					pos1=pos1-1
+				while pos1 >= 1 do
+					if insert_line.text:byte(pos1) == string.byte"{" then break end
+					pos1 = pos1 - 1
 				end
-				table.insert(pos_table,pos1)
-				find_pos, re_num = insert_line.text:find("}",pos2+1)+1, re_num+1
+				table.insert(pos_table, pos1)
+				find_pos, re_num = insert_line.text:find("}", pos2 + 1) + 1, re_num + 1
 			end
 
-			pos_table[1], re_num=1, 2
-			table.insert(pos_table,insert_line.text:len()+1)
-			for i=1,#pos_table-1 do
-				local new_text = insert_line.text:sub(pos_table[i],pos_table[i+1]-1)
-				local find_list = {new_text:find(var_expansion(temp_tag,re_num,sub))}
+			pos_table[1], re_num = 1, 2
+			table.insert(pos_table, insert_line.text:len() + 1)
+			for i = 1, #pos_table - 1 do
+				local new_text = insert_line.text:sub(pos_table[i], pos_table[i+1] - 1)
+				local find_list = {new_text:find(var_expansion(temp_tag, re_num, sub))}
 				local pos1, pos2 = find_list[1], find_list[2]
-				table.remove(find_list, 1) table.remove(find_list, 1)
+				table.remove(find_list, 1)
+				table.remove(find_list, 1)
 				assert(pos1)
 				user_var.bere_text = new_text:sub(pos1, pos2)
 				user_var.bere_match = find_list
-				
-				new_text = new_text:sub(1,pos1-1) .. var_expansion(temp_re_tag,re_num,sub) .. new_text:sub(pos2+1)
+
+				new_text = new_text:sub(1, pos1 - 1) .. var_expansion(temp_re_tag, re_num, sub) .. new_text:sub(pos2 + 1)
 				table.insert(insert_table, new_text)
-				re_num = re_num+1
+				re_num = re_num + 1
 			end
 		end
 	elseif mode.cuttime then
 		local fps = user_var.forcefps or 23.976
 
 		local end_value_table = {}
-		for v in var_expansion(temp_re_tag,1,sub):gmatch("[^\\]+") do
-			local pos=({v:find("^%d*%l+")})[2]
-			local head, value = v:sub(1,pos), v:sub(pos+1)
+		for v in var_expansion(temp_re_tag, 1, sub):gmatch"[^\\]+" do
+			local pos = ({v:find"^%d*%l+"})[2]
+			local head, value = v:sub(1, pos), v:sub(pos + 1)
 			if value:find("^%(.*%)$") then
-				value=value:match("%((.*)%)")
-				local val={}
-				for i in value:gmatch("[^,]+") do
-					table.insert(val,i)
+				value = value:match"%((.*)%)"
+				local val = {}
+				for i in value:gmatch"[^,]+" do
+					table.insert(val, i)
 				end
-				end_value_table[head]=val
+				end_value_table[head] = val
 			else
-				end_value_table[head]={value}
+				end_value_table[head] = {value}
 			end
 		end
 
 		local value_table = {}
-		for v in var_expansion(temp_tag,1,sub):gmatch("[^\\]+") do
-			local pos=({v:find("^%d*%l+")})[2]
-			local head, value = v:sub(1,pos), v:sub(pos+1)
-			if value:find("^%(.*%)$") then
-				value=value:match("%((.*)%)")
-				local val={}
-				local i=1
-				for p in value:gmatch("[^,]+") do
-					table.insert(val,{p,end_value_table[head][i]})
-					i=i+1
+		for v in var_expansion(temp_tag, 1, sub):gmatch"[^\\]+" do
+			local pos = ({v:find"^%d*%l+"})[2]
+			local head, value = v:sub(1, pos), v:sub(pos + 1)
+			if value:find"^%(.*%)$" then
+				value = value:match"%((.*)%)"
+				local val = {}
+				local i = 1
+				for p in value:gmatch"[^,]+" do
+					table.insert(val, {p, end_value_table[head][i]})
+					i = i + 1
 				end
 				table.insert(value_table, {head, val})
 			else
@@ -1703,46 +1763,52 @@ local function do_replace(sub, bere, mode)
 			end
 		end
 
-		--判断并转换值类型
-		for i=1,#value_table do
-			for p=1,#value_table[i][2] do
-				if value_table[i][2][p][1]:find("^[%d%.]+$") and value_table[i][2][p][2]:find("^[%d%.]+$") then--十进制
-					value_table[i][3]=10
-				elseif value_table[i][2][p][1]:find("^&H%w+&?$") then--ASS颜色格式
-					value_table[i][3]="rgb"
-					local rgba={{util.extract_color(value_table[i][2][p][1])}, {util.extract_color(value_table[i][2][p][2])}}
-					if rgba[1][4]~=0 then value_table[i][3]="a" end
-					value_table[i][2][p]=rgba
-				elseif value_table[i][2][p][1]:find("^%w+$") then--十六进制
-					value_table[i][3]=16
-					value_table[i][2][p]={tonumber(value_table[i][2][p][1],16), tonumber(value_table[i][2][p][2],16)}
+		-- 判断并转换值类型
+		for i = 1, #value_table do
+			for p = 1, #value_table[i][2] do
+				if value_table[i][2][p][1]:find"^[%d%.]+$" and value_table[i][2][p][2]:find"^[%d%.]+$" then -- 十进制
+					value_table[i][3] = 10
+				elseif value_table[i][2][p][1]:find"^&H%w+&?$" then -- ASS颜色格式
+					value_table[i][3] = "rgb"
+					local rgba = {{util.extract_color(value_table[i][2][p][1])}, {util.extract_color(value_table[i][2][p][2])}}
+					if rgba[1][4] ~= 0 then value_table[i][3] = "a" end
+					value_table[i][2][p] = rgba
+				elseif value_table[i][2][p][1]:find"^%w+$" then -- 十六进制
+					value_table[i][3] = 16
+					value_table[i][2][p] = {tonumber(value_table[i][2][p][1], 16), tonumber(value_table[i][2][p][2], 16)}
 				else
-					user_var.debug(tr"[cuttime] Unsupported format: "..value_table[i][2][p][1])
+					user_var.debug(tr"[cuttime] Unsupported format: " .. value_table[i][2][p][1])
 				end
 			end
 		end
 
 
 		local function _typeChange(value, v_type)
-			if v_type==10 then
-				return math.floor(value*1000+0.5)/1000
-			elseif v_type==16 then
-				return string.format("%X",value)
-			elseif v_type=="rgb" then
-				return util.ass_color(value[1],value[2],value[3])
-			elseif v_type=="a" then
+			if v_type == 10 then
+				return math.floor(value * 1000 + 0.5) / 1000
+			elseif v_type == 16 then
+				return ("%X"):format(value)
+			elseif v_type == "rgb" then
+				return util.ass_color(value[1], value[2], value[3])
+			elseif v_type == "a" then
 				util.ass_alpha(value[4])
 			end
 		end
 
 		local function _valueCalculation(current_time, total_time, value, pos)
-			if type(value[3])=="number" then
+			if type(value[3]) == "number" then
 				return user_var.cuttime.interpolate(current_time, total_time, value[2][pos][1], value[2][pos][2], value[1])
 			else
-				return {user_var.cuttime.interpolate(current_time, total_time, value[2][pos][1][1], value[2][pos][2][1], value[1]),
-						user_var.cuttime.interpolate(current_time, total_time, value[2][pos][1][2], value[2][pos][2][2], value[1]),
-						user_var.cuttime.interpolate(current_time, total_time, value[2][pos][1][3], value[2][pos][2][3], value[1]),
-						user_var.cuttime.interpolate(current_time, total_time, value[2][pos][1][4], value[2][pos][2][4], value[1])}
+				return {
+					user_var.cuttime.interpolate(
+						current_time, total_time, value[2][pos][1][1], value[2][pos][2][1], value[1]),
+					user_var.cuttime.interpolate(
+						current_time, total_time, value[2][pos][1][2], value[2][pos][2][2], value[1]),
+					user_var.cuttime.interpolate(
+						current_time, total_time, value[2][pos][1][3], value[2][pos][2][3], value[1]),
+					user_var.cuttime.interpolate(
+						current_time, total_time, value[2][pos][1][4], value[2][pos][2][4], value[1])
+				}
 			end
 		end
 
@@ -1751,11 +1817,13 @@ local function do_replace(sub, bere, mode)
 
 			for i = 1, #value_table do
 				if #value_table[i][2] == 1 then
-					result = result.."\\"..value_table[i][1] .. _typeChange(_valueCalculation(current_time, total_time, value_table[i], 1), value_table[i][3])
+					result = result.."\\"..value_table[i][1]
+						.. _typeChange(_valueCalculation(current_time, total_time, value_table[i], 1), value_table[i][3])
 				else
-					local str=""
-					for p=1,#value_table[i][2] do
-						str = str .. _typeChange(_valueCalculation(current_time, total_time, value_table[i], p), value_table[i][3])..","
+					local str = ""
+					for p = 1, #value_table[i][2] do
+						str = str
+							.. _typeChange(_valueCalculation(current_time, total_time, value_table[i], p), value_table[i][3])..","
 					end
 					result = result.."\\"..value_table[i][1].."("..str:sub(1,-2)..")"
 				end
@@ -1763,30 +1831,30 @@ local function do_replace(sub, bere, mode)
 
 			return "{"..result.."}"
 		end
-		
+
 		if user_var.cuttime.frame_model and aegisub.video_size() then
 			local start_f, end_f = user_var.ms2f(insert_line.start_time), user_var.ms2f(insert_line.end_time)
-			local total_time = end_f-start_f
-			for i=1,total_time do
+			local total_time = end_f - start_f
+			for i = 1, total_time do
 				local line = user_var.deepCopy(insert_line)
 				line.effect = "beretag!" .. line.effect:sub(9)
-				line.start_time = user_var.f2ms(start_f+i-1)
-				line.end_time = user_var.f2ms(start_f+i)
+				line.start_time = user_var.f2ms(start_f + i - 1)
+				line.end_time = user_var.f2ms(start_f + i)
 				line.text = _getTag(i, total_time, value_table, end_value_table) .. line.text
 				table.insert(insert_table, line)
 			end
 		else
-			local total_time = math.ceil((insert_line.end_time - insert_line.start_time)*fps/1000)
+			local total_time = math.ceil((insert_line.end_time - insert_line.start_time) * fps / 1000)
 			local start_time = insert_line.start_time
-			if start_time<=0 then start_time = -400/fps end
+			if start_time <= 0 then start_time = -400 / fps end
 			local now_time = start_time
-			for i=1,total_time do
+			for i = 1, total_time do
 				local line = user_var.deepCopy(insert_line)
-				line.effect = "beretag!"..line.effect:sub(9)
+				line.effect = "beretag!" .. line.effect:sub(9)
 				line.start_time = now_time
-				now_time = start_time + i*1000/fps
-				if now_time>=insert_line.end_time then
-					now_time=insert_line.end_time
+				now_time = start_time + i * 1000 / fps
+				if now_time >= insert_line.end_time then
+					now_time = insert_line.end_time
 				end
 				line.end_time = now_time
 				line.text = _getTag(i, total_time, value_table, end_value_table) .. line.text
@@ -1794,10 +1862,10 @@ local function do_replace(sub, bere, mode)
 			end
 		end
 	else
-		--循环找到insert_line里所有的temp_tag
-		if temp_tag=="" then--考虑到{}的情况
-			temp_tag="none"
-			insert_line.text = insert_line.text:gsub("}","none}")
+		-- 循环找到insert_line里所有的temp_tag
+		if temp_tag == "" then -- 考虑到{}的情况
+			temp_tag = "none"
+			insert_line.text = insert_line.text:gsub("}", "none}")
 		end
 		while true do
 			if mode.findtext then
@@ -1808,8 +1876,10 @@ local function do_replace(sub, bere, mode)
 				user_var.bere_text = insert_line.text:sub(pos1,pos2)
 				user_var.bere_match = find_list
 
-				find_pos = pos2 + 1 - insert_line.text:len() --先减原长再加新长，防止出现正则表达式导致的字数不同问题
-				insert_line.text = insert_line.text:sub(1,pos1-1)..var_expansion(temp_add_tail,re_num,sub)..insert_line.text:sub(pos2+1) --插入temp_add_tail
+				find_pos = pos2 + 1 - insert_line.text:len() -- 先减原长再加新长，防止出现正则表达式导致的字数不同问题
+				insert_line.text = insert_line.text:sub(1, pos1-1)
+					..var_expansion(temp_add_tail, re_num,sub)
+					..insert_line.text:sub(pos2+1) -- 插入temp_add_tail
 				find_pos = find_pos + insert_line.text:len()
 
 				re_num = re_num+1
@@ -1820,15 +1890,15 @@ local function do_replace(sub, bere, mode)
 				table.remove(find_list, 1) table.remove(find_list, 1)
 				user_var.bere_text = insert_line.text:sub(pos1, pos2)
 				user_var.bere_match = find_list
-				--先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
-				local pos3 = insert_line.text:find("}", pos2+1) --记录temp_tag后的}的位置
+				-- 先在}后插入temp_add_text，再替换temp_tag为temp_re_tag
+				local pos3 = insert_line.text:find("}", pos2+1) -- 记录temp_tag后的}的位置
 
 				local new_temp_add_text = var_expansion(temp_add_text, re_num, sub)
-				insert_line.text = insert_line.text:sub(1,pos3)..new_temp_add_text .. insert_line.text:sub(pos3+1) --插入new_temp_add_text
-				pos3 = pos3 + new_temp_add_text:len() - insert_line.text:len() --因为temp_tag含有正则表达式，无法直接获取长度，所以pos3先减原长，循环结束时再加新长
+				insert_line.text = insert_line.text:sub(1, pos3) .. new_temp_add_text .. insert_line.text:sub(pos3+1) -- 插入new_temp_add_text
+				pos3 = pos3 + new_temp_add_text:len() - insert_line.text:len() -- 因为temp_tag含有正则表达式，无法直接获取长度，所以pos3先减原长，循环结束时再加新长
 
-				insert_line.text = insert_line.text:sub(1,pos1-1) .. var_expansion(temp_re_tag,re_num,sub) .. insert_line.text:sub(pos2+1) --插入temp_re_tag
-				
+				insert_line.text = insert_line.text:sub(1,pos1-1) .. var_expansion(temp_re_tag,re_num,sub) .. insert_line.text:sub(pos2+1) -- 插入temp_re_tag
+
 				local _find_pos = insert_line.text:find("{", pos3 + insert_line.text:len() + 1)
 				if not _find_pos then break end
 				find_pos = _find_pos
@@ -1838,10 +1908,10 @@ local function do_replace(sub, bere, mode)
 		end
 	end
 
-	--判断该行类型，第一次替换则注释该行，多次替换则删除该行
+	-- 判断该行类型，第一次替换则注释该行，多次替换则删除该行
 	local function _do_insert(pos,insert_content)
 		if mode.uninsert then
-			return 0 --下文调用该函数时虽然return不同，但这里都返回0
+			return 0 -- 下文调用该函数时虽然return不同，但这里都返回0
 		end
 
 		local postProc = user_var.postProc
@@ -1860,7 +1930,7 @@ local function do_replace(sub, bere, mode)
 				while i <= #insert_table do
 					insert_content = insert_table[i]
 					postProc(insert_content)
-					sub.insert(pos+i-1,insert_content)
+					sub.insert(pos+i-1, insert_content)
 					i = i + 1
 				end
 				return i - 1
@@ -1868,9 +1938,9 @@ local function do_replace(sub, bere, mode)
 		end
 
 		if mode.cuttag then
-			local i=1
+			local i = 1
 			if mode.append then
-				while i<=#insert_table do
+				while i <= #insert_table do
 					insert_content.text = insert_table[i]
 					postProc(insert_content)
 					sub[0] = insert_content
@@ -1878,10 +1948,10 @@ local function do_replace(sub, bere, mode)
 				end
 				return 1
 			else
-				while i<=#insert_table do
+				while i <= #insert_table do
 					insert_content.text = insert_table[i]
 					postProc(insert_content)
-					sub.insert(pos+i-1,insert_content)
+					sub.insert(pos+i-1, insert_content)
 					i = i+1
 				end
 				return i-1
@@ -1894,14 +1964,14 @@ local function do_replace(sub, bere, mode)
 			append_num = append_num+1
 			return 0
 		else
-			sub.insert(pos,insert_content)
+			sub.insert(pos, insert_content)
 			return 1
 		end
 	end
 
-	if sub[bere].effect:find("^beretag!") then--删除行
-		--这里插入和删除的顺序不能更改，否则会导致逆天bug
-		local add_line_num = _do_insert(bere+1,insert_line)
+	if sub[bere].effect:find"^beretag!" then -- 删除行
+		-- 这里插入和删除的顺序不能更改，否则会导致逆天bug
+		local add_line_num = _do_insert(bere+1, insert_line)
 		sub.delete(bere)
 		_this_line = nil
 		if mode.append and bere < user_var.temp_line then
@@ -1909,12 +1979,12 @@ local function do_replace(sub, bere, mode)
 		end
 		return add_line_num
 	end
-	--注释行，并在effect头部加上:
+	-- 注释行，并在effect头部加上:
 	local tocmt = sub[bere]
 	tocmt.comment = true
-	tocmt.effect = ":"..tocmt.effect
+	tocmt.effect = ":" .. tocmt.effect
 	sub[bere] = tocmt
-	--将@改为!
+	-- 将@改为!
 	insert_line.effect = "beretag!" .. insert_line.effect:sub(9)
 	local add_line_num = _do_insert(bere + 1, insert_line)
 	return add_line_num + 1
@@ -1928,7 +1998,7 @@ local function find_event(sub)
 			return i
 		end
 	end
-	error("find_event error: Can not find [Events]")
+	error"find_event error: Can not find [Events]"
 end
 
 --- @param sub Subtitles
@@ -1941,7 +2011,7 @@ local function do_macro(sub, begin)
 	append_num = 0 -- 初始化 append 边界
 	aegisub.progress.title(tr"Tag Replace - Replace")
 	for i = begin, #sub do
-		if sub[i].effect:find("^template") and sub[i].comment then
+		if sub[i].effect:find"^template" and sub[i].comment then
 			user_var.progress[2] = user_var.progress[2] + 1
 		end
 	end
@@ -1955,14 +2025,41 @@ local function do_macro(sub, begin)
 			aegisub.progress.set(100 * user_var.progress[1] / math.max(user_var.progress[2], 1))
 			user_var.progress[1] = user_var.progress[1] + 1
 
-			if temp_line_now.effect:find("^template@[^#]-#.*$") then
+			if temp_line_now.effect:find"^template@[^#]-#.*$" then
 				local mode = get_mode(temp_line_now.effect)
 				local bere = begin
-				--根据mode判断
+				-- 执行自定义 mode
+				if next(mode.others) then
+					while bere <= #sub - append_num do
+						user_var.bere_line = bere
+						if not user_var.comment and user_var.effect:find"^beretag[@!]"
+							and cmp_class(temp_line_now.effect, user_var.effect, mode.strictclass)
+							and (
+								not mode.strictstyle
+								or temp_line_now.style == user_var.style)
+							and (
+								not mode.strictactor
+								or temp_line_now.actor == user_var.actor)
+						then
+							for _, k in ipairs(mode.others) do
+								local mode_fun, line = user_var._custom_mode[k], nil
+								if mode_fun ~= nil then
+									line = mode_fun(user_var.this)
+								end
+								if line ~= nil then
+									sub[user_var.bere_line] = line
+								end
+							end
+						end
+						bere = bere + 1
+					end
+					bere = begin
+				end
+				-- 根据 mode 判断
 				if mode.classmix then
-					local first_table, second_table = {}, {}  --- @type Line[], Line[]
+					local first_table, second_table = {}, {} --- @type Line[], Line[]
 					local to_comment --- @type boolean
-					local first_class, second_class, new_class = temp_line_now.text:match("^{(.-)}{(.-)}{(.-)}") --- @type string, string, string
+					local first_class, second_class, new_class = temp_line_now.text:match"^{(.-)}{(.-)}{(.-)}" --- @type string, string, string
 					for bere = begin, #sub - append_num do
 						local bere_line = sub[bere]
 						if (not mode.strictstyle or temp_line_now.style == bere_line.style)
@@ -1979,7 +2076,7 @@ local function do_macro(sub, begin)
 								to_comment = true
 							end
 							if to_comment then
-								if bere_line.effect:find("^beretag@") then
+								if bere_line.effect:find"^beretag@" then
 									bere_line.effect = ':'..bere_line.effect
 								end
 								bere_line.comment = true
@@ -1988,7 +2085,7 @@ local function do_macro(sub, begin)
 						end
 					end
 
-					--合并
+					-- 合并
 					local mix_table = {} --- @type Line[]
 					for i = 1, math.max(#first_table, #second_table) do
 						local new = user_var.classmixProc(first_table[i], second_table[i], new_class)
@@ -1996,7 +2093,7 @@ local function do_macro(sub, begin)
 						table.insert(mix_table, new)
 					end
 
-					--插入
+					-- 插入
 					if mode.append then
 						for _, v in ipairs(mix_table) do
 							sub[0] = v
@@ -2007,11 +2104,11 @@ local function do_macro(sub, begin)
 						end
 					end
 
-					--删除多余行
+					-- 删除多余行
 					local i=begin
-					while i<=#sub do
+					while i <= #sub do
 						local new=sub[i]
-						if new.comment and new.effect:find("^beretag!") then
+						if new.comment and new.effect:find"^beretag!" then
 							sub.delete(i)
 							_this_line = nil
 						else
@@ -2021,7 +2118,7 @@ local function do_macro(sub, begin)
 				elseif mode.onlyfind then
 					while bere <= #sub - append_num do
 						user_var.bere_line = bere
-						if not user_var.comment and user_var.effect:find("^beretag[@!]")
+						if not user_var.comment and user_var.effect:find"^beretag[@!]"
 							and cmp_class(temp_line_now.effect, user_var.effect, mode.strictclass)
 							and (
 								not mode.strictstyle
@@ -2047,18 +2144,18 @@ local function do_macro(sub, begin)
 						bere = bere + 1
 					end
 				else
-					--先 keyframe 后 替换: keyframe
+					-- 先 keyframe 后 替换 - keyframe
 					if mode.keyframe then
 						local key_text_table = {} --- @type string[]
-						if user_var.keytext~="" and user_var.keytext then
-							for line in user_var.keytext:gsub([[\N]],'\n'):gmatch("[^\n]+") do
+						if user_var.keytext ~= "" and user_var.keytext then
+							for line in user_var.keytext:gsub([[\N]],'\n'):gmatch"[^\n]+" do
 								table.insert(key_text_table, line)
 							end
 						end
 						local find_end = #sub
-						while bere <= find_end do--找到bere行
+						while bere <= find_end do -- 找到bere行
 							user_var.bere_line = bere
-							if not user_var.this.comment and user_var.this.effect:find("^beretag[@!]")
+							if not user_var.this.comment and user_var.this.effect:find"^beretag[@!]"
 								and cmp_class(temp_line_now.effect, user_var.this.effect, mode.strictclass)
 								and (not mode.strictactor or temp_line_now.actor == user_var.this.actor)
 								and (not mode.strictstyle or temp_line_now.style == user_var.this.style)
@@ -2069,10 +2166,10 @@ local function do_macro(sub, begin)
 								-- 替换 \fade? 和 \t
 
 								local function gsub_callback_tag_fad(match)
-									local t1, t2 = match:match("%(([^,]+),([^%)]+)%)")
+									local t1, t2 = match:match"%(([^,]+),([^%)]+)%)"
 									t1, t2 = tonumber(t1), tonumber(t2)
 									if t1 == nil or t2 == nil then
-										user_var.debug(string.format(tr"Not a number: %s", "\\fad in line "..user_var.num), true)
+										user_var.debug(tr"Not a number: %s":format("\\fad in line "..user_var.num), true)
 									end
 									assert(t1 and t2)
 									t1, t2 = math.floor(t1), math.floor(t2)
@@ -2080,7 +2177,7 @@ local function do_macro(sub, begin)
 									local duration = math.floor(user_var.end_time - user_var.start_time)
 									local t = insert_key_line.start_time - user_var.start_time
 									if t < t1 or t > duration - t2 then
-										return string.format([[\fade(%d,%d,%d,%d,%d,%d,%d)]],
+										return ([[\fade(%d,%d,%d,%d,%d,%d,%d)]]):format(
 											255, 0, 255,
 											0, t1,
 											duration - tonumber(t2), duration)
@@ -2094,25 +2191,26 @@ local function do_macro(sub, begin)
 								local function gsub_callback_tag_fade(match)
 									-- \fade(<a1>,<a2>,<a3>,<t1>,<t2>,<t3>,<t4>)
 									local vals = {}
-									for s in (match:match([[^\fade%((.+)%)$]]) or ""):gmatch("[^,]+") do
+									for s in (match:match[[^\fade%((.+)%)$]] or ""):gmatch"[^,]+" do
 										table.insert(vals, math.floor(s))
 									end
 									if #vals ~= 7 then
-										user_var.debug(string.format([[Wrong \fade in %d]], user_var.num), true)
+										user_var.debug(([[Wrong \fade in %d]]):format(user_var.num), true)
 									end
 
 									local offset = math.floor(user_var.start_time - insert_key_line.start_time)
-									return string.format([[\fade(%d,%d,%d,%d,%d,%d,%d)]],
+									return ([[\fade(%d,%d,%d,%d,%d,%d,%d)]]):format(
 										vals[1], vals[2], vals[3],
 										vals[4] + offset, vals[5] + offset,
-										vals[6] + offset, vals[7] + offset)
+										vals[6] + offset, vals[7] + offset
+									)
 								end
 
 								--- @param match string
 								--- @return string
 								local function gsub_callback_tag_t(match)
 									local vals = {}
-									for s in (match:match([[^\t%(([^\]+).+%)$]]) or ""):gmatch("[^,]+") do
+									for s in (match:match[[^\t%(([^\]+).+%)$]] or ""):gmatch"[^,]+" do
 										table.insert(vals, s)
 									end
 									if #vals == 0 then
@@ -2127,16 +2225,17 @@ local function do_macro(sub, begin)
 										vals[3] = 1
 									end
 
-									vals[4] = match:match([[^\t%([^\]*(.+)%)$]])
+									vals[4] = match:match[[^\t%([^\]*(.+)%)$]]
 									if not vals[4] or #vals > 4 then
-										user_var.debug(string.format([[Wrong \t in %d]], user_var.num), true)
+										user_var.debug(([[Wrong \t in %d]]):format(user_var.num), true)
 									end
 
 									local offset = user_var.start_time - insert_key_line.start_time
-									return string.format([[\t(%d,%d,%s,%s)]],
+									return ([[\t(%d,%d,%s,%s)]]):format(
 										vals[1] + offset,
 										vals[2] + offset,
-										vals[3], vals[4])
+										vals[3], vals[4]
+									)
 								end
 
 								if (user_var.keytext == "" or not user_var.keytext)
@@ -2144,21 +2243,23 @@ local function do_macro(sub, begin)
 									and user_var.keyclip
 								then -- 只有clip的情况
 
-									--处理keyclip内容
-									local key_clip_point_table = {}
-									local key_clip_table = {}
-									for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table, line) end
+									-- 处理keyclip内容
+									local key_clip_point_table = {} --- @type string[]
+									local key_clip_table = {} --- @type string[]
+									for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch"[^\n]+" do
+										table.insert(key_clip_table, line)
+									end
 
 									if key_clip_table[1] ~= "shake_shape_data 4.0" then
-										user_var.debug([[The $keyclip "]]..tostring(key_clip_table[1])..[[" is not supported]])
+										user_var.debug(([[The $keyclip "%s" is not supported]]):format(key_clip_table[1]))
 									end
 
 									local height = select(1,karaskel.collect_head(user_var.sub)).res_y
 									for _, line in ipairs(key_clip_table) do
-										if line:sub(1,11) == "vertex_data" then
+										if line:sub(1, 11) == "vertex_data" then
 											line = line:sub(13)
 
-											--坐标转换
+											-- 坐标转换
 											local coords = {}
 											for x, y in string.gmatch(line, "([^ ]-) ([^ ]-) ") do
 												table.insert(coords, {tonumber(x), tonumber(y)})
@@ -2168,18 +2269,18 @@ local function do_macro(sub, begin)
 											end
 											line=""
 											for _, coord in ipairs(coords) do
-												line = line..string.format("%.2f %.2f ", coord[1], coord[2])
+												line = line..("%.2f %.2f "):format(coord[1], coord[2])
 											end
 
-											local _,pos2=line:find("^[^ ]- [^ ]- ")
+											local _, pos2 = line:find"^[^ ]- [^ ]- "
 											assert(pos2)
 											table.insert(key_clip_point_table,
 												[[{\clip(m ]]..line:sub(0, pos2).."l"..line:sub(pos2)..")}")
 										end
 									end
 
-									--注释bere行
-									if user_var.this.effect:find("^beretag@") then
+									-- 注释bere行
+									if user_var.this.effect:find"^beretag@" then
 										local line = sub[bere]
 										line.effect = ":"..line.effect
 										line.comment = true
@@ -2192,9 +2293,9 @@ local function do_macro(sub, begin)
 
 									local key_line = sub[user_var.bere_line]
 									key_line.effect = "beretag!"..key_line.effect:sub(9)
-									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
+									local fps = user_var.forcefps or key_text_table[2]:match"%d+%.?%d*"
 									local time_start, step_num, time_end = key_line.start_time, 1, nil
-									if time_start <= 0 then time_start = -400/fps end
+									if time_start <= 0 then time_start = -400 / fps end
 									time_end = time_start
 									local key_clip_point_table_len = #key_clip_point_table
 									if mode.append then
@@ -2231,7 +2332,7 @@ local function do_macro(sub, begin)
 												:gsub([[\fade%([^%)]+%)]], gsub_callback_tag_fade)
 												:gsub([[\t%([^%)]+%)]], gsub_callback_tag_t)
 
-											user_var.keyProc(insert_key_line, {i,key_clip_point_table_len})
+											user_var.keyProc(insert_key_line, {i, key_clip_point_table_len})
 											sub.insert(insert_pos,insert_key_line)
 											insert_pos = insert_pos+1
 										end
@@ -2242,13 +2343,13 @@ local function do_macro(sub, begin)
 								else
 
 									if key_text_table[1] ~= "Adobe After Effects 6.0 Keyframe Data" then
-										user_var.debug(string.format(tr[[The $keytext "%s" is not supported]], tostring(key_text_table[1])), true)
+										user_var.debug(tr[[The $keytext "%s" is not supported]]:format(tostring(key_text_table[1])), true)
 									end
 
 									user_var.bere_line = bere
 
-									--注释bere行
-									if user_var.this.effect:find("^beretag@") then
+									-- 注释bere行
+									if user_var.this.effect:find"^beretag@" then
 										local line = sub[bere]
 										line.effect = ":"..line.effect
 										line.comment = true
@@ -2259,66 +2360,77 @@ local function do_macro(sub, begin)
 										sub[bere] = line
 									end
 
-									--补全tag
-									local key_line = user_var.deepCopy(user_var.this) --必须复制处理后的行，后面要使用新属性
-									if not key_line.text:find("{.-}") then
+									-- 补全tag
+									local key_line = user_var.deepCopy(user_var.this) -- 必须复制处理后的行，后面要使用新属性
+									if not key_line.text:find"{.-}" then
 										key_line.text = "{}"..key_line.text
 									end
-									if not user_var.text:find([[\pos%([^,]-,[^,%)]-%)]]) then
+									if not user_var.text:find[[\pos%([^,]-,[^,%)]-%)]] then
 										local pos = key_line.text:find("}")
-										key_line.text = key_line.text:sub(1,pos-1)..string.format([[\pos(%.2f,%.2f)]], key_line.x, key_line.y)..key_line.text:sub(pos)
+										key_line.text = key_line.text:sub(1, pos-1)
+											..([[\pos(%.2f,%.2f)]]):format(key_line.x, key_line.y)
+											..key_line.text:sub(pos)
 									end
 									if not user_var.text:find([=[\fscx[%d%.]]=]) then
 										local pos = key_line.text:find("}")
-										key_line.text = key_line.text:sub(1,pos-1)..[[\fscx100]]..key_line.text:sub(pos)
+										key_line.text = key_line.text:sub(1, pos-1)
+											..[[\fscx100]]
+											..key_line.text:sub(pos)
 									end
 									if not user_var.text:find([=[\fscy[%d%.]]=]) then
 										local pos = key_line.text:find("}")
-										key_line.text = key_line.text:sub(1,pos-1)..[[\fscy100]]..key_line.text:sub(pos)
+										key_line.text = key_line.text:sub(1, pos-1)
+											..[[\fscy100]]
+											..key_line.text:sub(pos)
 									end
 									if not user_var.text:find([=[\frz%-?[%d%.]]=]) then
 										local pos = key_line.text:find("}")
-										key_line.text = key_line.text:sub(1,pos-1)..[[\frz0]]..key_line.text:sub(pos)
+										key_line.text = key_line.text:sub(1, pos-1)
+											..[[\frz0]]
+											..key_line.text:sub(pos)
 									end
 									if not user_var.text:find([[\org%([^,]+,[^,]+%)]]) then
 										local pos = key_line.text:find("}")
-										key_line.text = key_line.text:sub(1,pos-1)..[[\org]]..key_line.text:match([[\pos(%([^%)]-%))]])..key_line.text:sub(pos)
+										key_line.text = key_line.text:sub(1, pos-1)
+											..[[\org]]
+											..key_line.text:match([[\pos(%([^%)]-%))]])
+											..key_line.text:sub(pos)
 									end
 									key_line.effect = "beretag!"..key_line.effect:sub(9)
 
-									--处理keytext内容
-									local fps = user_var.forcefps or key_text_table[2]:match("%d+%.?%d*")
+									-- 处理keytext内容
+									local fps = user_var.forcefps or key_text_table[2]:match"%d+%.?%d*"
 									local time_start, step_num, time_end = key_line.start_time, 1, nil
 									if time_start <= 0 then time_start = -400/fps end
 									local key_text_table_pos = 2
 									while key_text_table[key_text_table_pos] ~= [[	Frame	X pixels	Y pixels	Z pixels]] do
-										key_text_table_pos=key_text_table_pos+1
+										key_text_table_pos = key_text_table_pos + 1
 									end
-									key_text_table_pos=key_text_table_pos+1
+									key_text_table_pos = key_text_table_pos + 1
 
 									local key_pos, key_scale, key_rot = {},{},{}
-									while key_text_table[key_text_table_pos] ~= "Scale" do --read Position
-										table.insert(key_pos, {key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
+									while key_text_table[key_text_table_pos] ~= "Scale" do -- read Position
+										table.insert(key_pos, {key_text_table[key_text_table_pos]:match"^\t[^\t]*\t([^\t]*)\t([^\t]*)"})
 										key_text_table_pos = key_text_table_pos + 1
 									end
-									key_text_table_pos = key_text_table_pos+2
-									while key_text_table[key_text_table_pos] ~= "Rotation" do --read Scale
-										table.insert(key_scale, {key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)\t([^\t]*)")})
+									key_text_table_pos = key_text_table_pos + 2
+									while key_text_table[key_text_table_pos] ~= "Rotation" do -- read Scale
+										table.insert(key_scale, {key_text_table[key_text_table_pos]:match"^\t[^\t]*\t([^\t]*)\t([^\t]*)"})
 										key_text_table_pos = key_text_table_pos + 1
 									end
-									key_text_table_pos = key_text_table_pos+2
-									while key_text_table[key_text_table_pos] ~= "End of Keyframe Data" do --read Rotation
-										table.insert(key_rot, {key_text_table[key_text_table_pos]:match("^\t[^\t]*\t([^\t]*)")})
+									key_text_table_pos = key_text_table_pos + 2
+									while key_text_table[key_text_table_pos] ~= "End of Keyframe Data" do -- read Rotation
+										table.insert(key_rot, {key_text_table[key_text_table_pos]:match"^\t[^\t]*\t([^\t]*)"})
 										key_text_table_pos = key_text_table_pos + 1
 									end
-									--处理keyclip内容
+									-- 处理keyclip内容
 									local key_clip_point_table = {}
 									if user_var.keyclip ~= "" and user_var.keyclip then
 										local key_clip_table = {}
-										for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch("[^\n]+") do table.insert(key_clip_table,line) end
+										for line in user_var.keyclip:gsub([[\N]],'\n'):gmatch"[^\n]+" do table.insert(key_clip_table, line) end
 
 										if key_clip_table[1] ~= "shake_shape_data 4.0" then
-											user_var.debug([["]]..key_clip_table[1]..[[" is not supported]])
+											user_var.debug(tr[["%s" is not supported]]:format(key_clip_table[1]))
 										end
 
 										local height = select(1, karaskel.collect_head(user_var.sub)).res_y
@@ -2326,7 +2438,7 @@ local function do_macro(sub, begin)
 											if line:sub(1, 11) == "vertex_data" then
 												line=line:sub(13)
 
-												--坐标转换
+												-- 坐标转换
 												local coords = {}
 												for x, y in string.gmatch(line, "([^ ]-) ([^ ]-) ") do
 													table.insert(coords, {tonumber(x), tonumber(y)})
@@ -2349,11 +2461,11 @@ local function do_macro(sub, begin)
 									for i = #key_clip_point_table + 1, #key_rot do
 										key_clip_point_table[i] = ""
 									end
-									--开始插入行
+									-- 开始插入行
 									local x, y, fx, fy, fz, ox, oy
-									local pos_table, out_value = {1,#key_line.text}, {}
-									
-									local pos1,pos2 = key_line.text:find([[\pos%([^,]-,]])
+									local pos_table, out_value = {1, #key_line.text}, {}
+
+									local pos1,pos2 = key_line.text:find[[\pos%([^,]-,]]
 									x = key_line.text:sub(pos1+5, pos2-1)
 									table.insert(out_value, {pos1, x, key_pos, 1})
 									table.insert(pos_table, pos1+4) table.insert(pos_table, pos2)
@@ -2363,31 +2475,31 @@ local function do_macro(sub, begin)
 									table.insert(out_value, {pos1, y, key_pos, 2})
 									table.insert(pos_table, pos1) table.insert(pos_table, pos2)
 
-									pos1, pos2 = key_line.text:find([[\fscx[%d%.]+]])
+									pos1, pos2 = key_line.text:find[[\fscx[%d%.]+]]
 									fx = key_line.text:sub(pos1+5, pos2)
 									table.insert(out_value, {pos1, fx, key_scale, 1})
 									table.insert(pos_table, pos1+4) table.insert(pos_table, pos2+1)
 
-									pos1, pos2 = key_line.text:find([[\fscy[%d%.]+]])
+									pos1, pos2 = key_line.text:find[[\fscy[%d%.]+]]
 									fy = key_line.text:sub(pos1+5, pos2)
 									table.insert(out_value, {pos1, fy, key_scale, 2})
 									table.insert(pos_table, pos1+4) table.insert(pos_table, pos2+1)
 
-									pos1, pos2 = key_line.text:find([[\frz%-?[%d%.]+]])
+									pos1, pos2 = key_line.text:find[[\frz%-?[%d%.]+]]
 									fz = key_line.text:sub(pos1+4, pos2)
 									table.insert(out_value, {pos1, fz, key_rot, 1})
 									table.insert(pos_table, pos1+3) table.insert(pos_table, pos2+1)
-									
-									pos1, pos2 = key_line.text:find([[\org%([^,]-,]])
+
+									pos1, pos2 = key_line.text:find[[\org%([^,]-,]]
 									ox = key_line.text:sub(pos1+5, pos2-1)
 									table.insert(out_value, {pos1, ox, key_pos, 1})
 									table.insert(pos_table, pos1+4) table.insert(pos_table, pos2)
 
-									pos1, pos2 = key_line.text:find([[,[^,]-%)]],pos2)
+									pos1, pos2 = key_line.text:find([[,[^,]-%)]], pos2)
 									oy = key_line.text:sub(pos1+1, pos2-1)
 									table.insert(out_value, {pos1, oy, key_pos, 2})
 									table.insert(pos_table, pos1) table.insert(pos_table, pos2)
-									
+
 
 									table.sort(out_value, function(a,b) return a[1] < b[1] end) table.sort(pos_table)
 
@@ -2402,7 +2514,7 @@ local function do_macro(sub, begin)
 										key_line.text:sub(pos_table[15], pos_table[16])
 									}
 
-									--根据mode插入
+									-- 根据mode插入
 
 									--- @param num integer
 									--- @param i integer
@@ -2413,18 +2525,27 @@ local function do_macro(sub, begin)
 										-- out_value[num][2] beretag 对应标签的值
 
 										local _char = insert_key_line_table[num]:sub(-1)
-										if _char=='x' or _char=='y' then
-											return
-												insert_key_line_table[num] ..
-												math.floor((out_value[num][2] * out_value[num][3][i][out_value[num][4]] / out_value[num][3][1][out_value[num][4]])*100+0.5)/100
-										elseif _char=='z' then
-											return
-												insert_key_line_table[num] ..
-												math.floor((out_value[num][2] - out_value[num][3][i][out_value[num][4]] + out_value[num][3][1][out_value[num][4]])*100+0.5)/100
+										if _char == 'x' or _char == 'y' then
+											return insert_key_line_table[num]
+												.. math.floor((
+														out_value[num][2]
+														* out_value[num][3][i][out_value[num][4]]
+														/ out_value[num][3][1][out_value[num][4]]
+													) * 100 + 0.5) / 100
+										elseif _char == 'z' then
+											return insert_key_line_table[num]
+												.. math.floor((
+														out_value[num][2]
+														- out_value[num][3][i][out_value[num][4]]
+														+ out_value[num][3][1][out_value[num][4]]
+													) * 100 + 0.5) / 100
 										else
-											return
-												insert_key_line_table[num] ..
-												math.floor((out_value[num][2] + out_value[num][3][i][out_value[num][4]] - out_value[num][3][1][out_value[num][4]])*100+0.5)/100
+											return insert_key_line_table[num]
+											.. math.floor((
+													out_value[num][2]
+													+ out_value[num][3][i][out_value[num][4]]
+													- out_value[num][3][1][out_value[num][4]]
+												) * 100 + 0.5) / 100
 										end
 									end
 
@@ -2445,7 +2566,7 @@ local function do_macro(sub, begin)
 												insert_key_line_table[8]
 
 											insert_key_line.start_time = time_end
-											time_end = time_start + step_num*1000/fps
+											time_end = time_start + step_num * 1000 / fps
 											insert_key_line.end_time = time_end
 											step_num = step_num+1
 
@@ -2475,7 +2596,7 @@ local function do_macro(sub, begin)
 											insert_key_line.start_time = time_end
 											time_end = time_start + step_num * 1000 / fps
 											insert_key_line.end_time = time_end
-											step_num = step_num+1
+											step_num = step_num + 1
 
 											insert_key_line.text = insert_key_line.text
 												:gsub([[\fad%([^%)]+%)]], gsub_callback_tag_fad)
@@ -2484,21 +2605,21 @@ local function do_macro(sub, begin)
 
 											user_var.keyProc(insert_key_line, {i, key_rot_len})
 											sub.insert(insert_pos, insert_key_line)
-											insert_pos = insert_pos+1
+											insert_pos = insert_pos + 1
 										end
 										find_end = find_end + insert_pos - bere - 1
 										bere = insert_pos - 1
 									end
-								
+
 								end
 							end
-							--next
+							-- next
 							bere = bere + 1
 						end
-						--end
+						-- end
 						bere = begin
 						while bere <= #sub do
-							if user_var.this.effect:find("^beretag!") and user_var.this.comment then
+							if user_var.this.effect:find"^beretag!" and user_var.this.comment then
 								sub.delete(bere)
 							end
 							bere = bere + 1
@@ -2508,7 +2629,7 @@ local function do_macro(sub, begin)
 
 						user_var.keytext, user_var.keyclip = "", ""
 					end
-					--先 keyframe 后 替换: 替换
+					-- 先 keyframe 后 替换 - 替换
 					while bere <= #sub - append_num do
 						user_var.bere_line = bere
 						if (not mode.strictstyle
@@ -2516,14 +2637,14 @@ local function do_macro(sub, begin)
 							and
 							(not mode.strictactor
 								or temp_line_now.actor == user_var.this.actor)
-							then
+						then
 							bere = bere + do_replace(sub, bere, mode)
 						else
 							bere = bere + 1
 						end
 					end
 				end
-				if mode.recache and #user_var.subcache > 0 then--插入缓存行
+				if mode.recache and #user_var.subcache > 0 then -- 插入缓存行
 					for i = 1, #user_var.subcache do
 						user_var.subcache[i].effect = "beretag!"..user_var.subcache[i].effect:sub(9)
 					end
@@ -2540,11 +2661,11 @@ local function do_macro(sub, begin)
 				end
 			end
 			-- 检索命令行
-			if temp_line_now.effect:find("^template#")
+			if temp_line_now.effect:find"^template#"
 				and not get_mode(temp_line_now.effect).pre
 			then
 				var_expansion(temp_line_now.text, 2, sub)
-				if #user_var.subcache > 0 then --插入缓存行
+				if #user_var.subcache > 0 then -- 插入缓存行
 					local mode = get_mode(temp_line_now.effect)
 					if mode.recache then
 						for i = 1, #user_var.subcache do
@@ -2576,9 +2697,9 @@ local function do_macro(sub, begin)
 
 	local i = begin
 	while i <= #sub do
-		if sub[i].effect:find("^beretag!")
+		if sub[i].effect:find"^beretag!"
 			and not sub[i].comment
-			and sub[i].text==""
+			and sub[i].text == ""
 		then
 			sub.delete(i)
 		else
@@ -2605,14 +2726,14 @@ local function pre_template_line(sub, begin)
 	aegisub.progress.title(tr"Tag Replace - Exp pre line")
 	for i = begin, #sub do
 		local line = sub[i]
-		if line.comment and line.effect:find("^template#") and get_mode(line.effect).pre then
+		if line.comment and line.effect:find"^template#" and get_mode(line.effect).pre then
 			var_expansion(line.text, 2, sub)
 		end
 	end
 end
 
 --- @param subtitles Subtitles
-local function macro_processing_function(subtitles)--Execute Macro. 执行宏
+local function macro_processing_function(subtitles) -- Execute Macro. 执行宏
 	local begin = find_event(subtitles)
 	initialize(subtitles, begin)
 	pre_template_line(subtitles, begin)
@@ -2621,9 +2742,9 @@ end
 
 --- @param sub Subtitles
 local function comment_template_line(sub, selected_table)
-	for i=find_event(sub),#sub do
+	for i = find_event(sub), #sub do
 		if selected_table[tostring(i)] ~= true
-			and sub[i].effect:find("^template[@#]")
+			and sub[i].effect:find"^template[@#]"
 			and sub[i].comment
 		then
 			local line = sub[i]
@@ -2637,7 +2758,7 @@ end
 local function uncomment_template_line(sub)
 	for i = find_event(sub), #sub do
 		local line = sub[i]
-		if line.effect:find("^:template") then
+		if line.effect:find"^:template" then
 			line.effect = line.effect:sub(2)
 			sub[i] = line
 		end
@@ -2651,7 +2772,7 @@ local function macro_processing_function_selected(subtitles, selected_lines)
 	local begin = find_event(subtitles)
 	initialize(subtitles, begin)
 	pre_template_line(subtitles, begin)
-	--搜索所有非所选的template行，对其中注释行头部添加:，执行完后再还原
+	-- 搜索所有非所选的template行，对其中注释行头部添加:，执行完后再还原
 	local selected_table = {}
 	for _, v in ipairs(selected_lines) do
 		selected_table[tostring(v)] = true
@@ -2667,9 +2788,21 @@ local function macro_processing_function_initialize(subtitles)
 	initialize(subtitles, find_event(subtitles))
 end
 
-aegisub.register_macro(tr"Tag Replace/Apply", tr"Replace all strings with your settings", macro_processing_function)
-aegisub.register_macro(tr"Tag Replace/Apply the selected lines", tr"Replace selected lines' strings with your settings", macro_processing_function_selected)
-aegisub.register_macro(tr"Tag Replace/Initialize", tr"Only do the initialize function", macro_processing_function_initialize)
+aegisub.register_macro(
+	tr"Tag Replace/Apply",
+	tr"Replace all strings with your settings",
+	macro_processing_function
+)
+aegisub.register_macro(
+	tr"Tag Replace/Apply the selected lines",
+	tr"Replace selected lines' strings with your settings",
+	macro_processing_function_selected
+)
+aegisub.register_macro(
+	tr"Tag Replace/Initialize",
+	tr"Only do the initialize function",
+	macro_processing_function_initialize
+)
 
 --- @param subtitles Subtitles
 local function filter_processing_function(subtitles, old_settings)
@@ -2678,7 +2811,7 @@ local function filter_processing_function(subtitles, old_settings)
 	pre_template_line(subtitles, begin)
 	do_macro(subtitles, begin)
 	for i = find_event(subtitles), #subtitles do
-		if subtitles[i].effect:find("^beretag!") and not subtitles[i].comment then
+		if subtitles[i].effect:find"^beretag!" and not subtitles[i].comment then
 			local line = subtitles[i]
 			line.effect = "beretag!"
 			subtitles[i] = line
@@ -2686,4 +2819,9 @@ local function filter_processing_function(subtitles, old_settings)
 	end
 end
 
-aegisub.register_filter(tr"Tag Replace", tr"Replace and clear sth", 2500, filter_processing_function)
+aegisub.register_filter(
+	tr"Tag Replace",
+	tr"Replace and clear sth",
+	2500,
+	filter_processing_function
+)

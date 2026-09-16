@@ -1,0 +1,7 @@
+/*
+!/.vscode/
+!/.github/
+!/doc/
+!/.gitignore
+!/README.md
+!/tag-replace.lua

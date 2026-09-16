@@ -1,16 +1,16 @@
 {
-    "[lua]": {
-        "editor.tabSize": 3,
-        "editor.formatOnSave": false,
-        "editor.formatOnType": false,
-        "editor.defaultFormatter": "Don't format",
-    },
-    "Lua.diagnostics.globals": [
-        "script_description",
-        "aegisub",
-        "script_name",
-        "script_author",
-        "script_version",
-        "karaskel",
-    ],
+  "[lua]": {
+    "editor.tabSize": 3,
+    "editor.formatOnSave": false,
+    "editor.formatOnType": false,
+    "editor.defaultFormatter": "Don't format"
+  },
+  "Lua.diagnostics.globals": [
+    "script_description",
+    "aegisub",
+    "script_name",
+    "script_author",
+    "script_version",
+    "karaskel"
+  ]
 }
